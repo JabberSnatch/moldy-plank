@@ -2,12 +2,20 @@
 
 #include <iostream>
 
+#undef interface
+
 namespace bstk {
 
 std::unique_ptr<OSContext> CreateContext() { return std::unique_ptr<OSContext>(new Win32Context()); }
 
 } // namespace bstk
 
+struct Win32ModuleInfo
+{
+    HMODULE handle;
+    FILETIME timestamp;
+    uint32_t load_index;
+};
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -89,27 +97,92 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window)
     return true;
 }
 
-bstk::EngineModule Win32Context::EngineLoad(char const* _path)
+bstk::EngineModule Win32Context::EngineLoad(std::string const& _path, std::string const& _lockfile)
 {
-    return bstk::EngineModule{
-        "",
-        0ull,
-        0ull,
-        bstk::EngineInterface{
-            bstk::StubEngine::Create,
-            bstk::StubEngine::Shutdown,
-            bstk::StubEngine::Reload,
-            bstk::StubEngine::LogicUpdate,
-            bstk::StubEngine::DrawFrame
-        }
+    bstk::EngineModule module{
+        _path,
+        _lockfile,
+        new Win32ModuleInfo{},
+        bstk::EngineInterface{}
     };
+
+    EngineReloadModule(module);
+    return module;
+}
+
+void Win32Context::EngineRelease(bstk::EngineModule& _module)
+{
+    Win32ModuleInfo& moduleInfo = *(Win32ModuleInfo*)_module.platform_data;
+    FreeLibrary(moduleInfo.handle);
+    delete _module.platform_data;
 }
 
 bool Win32Context::EngineReloadRequired(bstk::EngineModule const& _module)
 {
-    return false;
+    Win32ModuleInfo& moduleInfo = *(Win32ModuleInfo*)_module.platform_data;
+
+    FILETIME lastWriteTime{};
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    GetFileAttributesExA(_module.path.c_str(), GetFileExInfoStandard, &data);
+    lastWriteTime = data.ftLastWriteTime;
+    return (CompareFileTime(&lastWriteTime, &moduleInfo.timestamp) != 0);
 }
 
 void Win32Context::EngineReloadModule(bstk::EngineModule& _module)
 {
+    Win32ModuleInfo& moduleInfo = *(Win32ModuleInfo*)_module.platform_data;
+    FreeLibrary(moduleInfo.handle);
+
+    bool hasLockFile = (_module.lockfile != "");
+    WIN32_FILE_ATTRIBUTE_DATA dummy;
+    for (uint32_t readIndex = 0u; readIndex < 128; ++readIndex)
+    {
+        if (!hasLockFile
+            || !GetFileAttributesExA(_module.lockfile.c_str(), GetFileExInfoStandard, &dummy))
+        {
+            FILETIME lastWriteTime{};
+            WIN32_FILE_ATTRIBUTE_DATA data{};
+            GetFileAttributesExA(_module.path.c_str(), GetFileExInfoStandard, &data);
+            lastWriteTime = data.ftLastWriteTime;
+
+            HANDLE file = CreateFileA(_module.path.c_str(),
+                                      GENERIC_READ,
+                                      FILE_SHARE_READ,
+                                      NULL,
+                                      NULL,
+                                      FILE_ATTRIBUTE_NORMAL,
+                                      NULL);
+
+            std::string altpath = _module.path;
+            altpath[altpath.size() - 1] = '_';
+            altpath += std::to_string(moduleInfo.load_index++);
+            moduleInfo.load_index &= 0xff;
+
+            for (uint32_t copyIndex = 0u; copyIndex < 128u; ++copyIndex)
+                if (CopyFileA(_module.path.c_str(), altpath.c_str(), FALSE))
+                    break;
+
+            CloseHandle(file);
+
+            HMODULE module = LoadLibraryA(TEXT(altpath.c_str()));
+            if (module == NULL)
+                std::cout << "Module not found" << std::endl;
+
+            bstk::EngineInterface interface{
+                (bstk::EngineInterface::Create_t)GetProcAddress(module, "ModuleInterface_Create"),
+                (bstk::EngineInterface::Shutdown_t)GetProcAddress(module, "ModuleInterface_Shutdown"),
+                (bstk::EngineInterface::Reload_t)GetProcAddress(module, "ModuleInterface_Reload"),
+                (bstk::EngineInterface::LogicUpdate_t)GetProcAddress(module, "ModuleInterface_LogicUpdate"),
+                (bstk::EngineInterface::DrawFrame_t)GetProcAddress(module, "ModuleInterface_DrawFrame"),
+            };
+
+            _module.interface = interface;
+            moduleInfo.timestamp = lastWriteTime;
+            moduleInfo.handle = module;
+            std::cout << "load attempt " << readIndex << std::endl;
+            break;
+        }
+
+        Sleep(100);
+    }
 }

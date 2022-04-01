@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "iotk.hpp"
 
@@ -14,19 +15,24 @@ struct EngineInterface
     using hinstance_t = uint64_t;
     using hwindow_t = uint64_t;
 
-    context_t* (*Create)(hinstance_t, hwindow_t);
-    void (*Shutdown)(context_t*);
-    void (*Reload)(context_t*);
+    using Create_t = context_t* (*)(hinstance_t, hwindow_t);
+    using Shutdown_t = void (*)(context_t*);
+    using Reload_t = void (*)(context_t*);
+    using LogicUpdate_t = void (*)(context_t*, iotk::input_t const*);
+    using DrawFrame_t = void (*)(context_t*);
 
-    void (*LogicUpdate)(context_t*, iotk::input_t const*);
-    void (*DrawFrame)(context_t*);
+    Create_t Create;
+    Shutdown_t Shutdown;
+    Reload_t Reload;
+    LogicUpdate_t LogicUpdate;
+    DrawFrame_t DrawFrame;
 };
 
 struct EngineModule
 {
-    char const* path;
-    uint64_t platform_handle;
-    uint64_t timestamp;
+    std::string path;
+    std::string lockfile;
+    void* platform_data;
     EngineInterface interface;
 };
 
@@ -39,7 +45,6 @@ struct OSWindow
 
 struct OSContext
 {
-
     OSContext() = default;
     virtual ~OSContext() = default;
     OSContext(OSContext const&) = delete;
@@ -48,7 +53,8 @@ struct OSContext
     virtual OSWindow CreateWindow() = 0;
     virtual bool PumpEvents(OSWindow& _window) = 0;
 
-    virtual EngineModule EngineLoad(char const* _path) = 0;
+    virtual EngineModule EngineLoad(std::string const& _path, std::string const& _lockfile) = 0;
+    virtual void EngineRelease(EngineModule& _module) = 0;
     virtual bool EngineReloadRequired(EngineModule const& _module) = 0;
     virtual void EngineReloadModule(EngineModule& _module) = 0;
 };
@@ -67,11 +73,11 @@ struct StubOS : public OSContext
     StubOS() = default;
     OSWindow CreateWindow() override { return OSWindow{}; }
     bool PumpEvents(OSWindow&) override { return false; }
-    EngineModule EngineLoad(char const*) override {
+    EngineModule EngineLoad(std::string const&, std::string const&) override {
         return EngineModule{
             "",
-            0ull,
-            0ull,
+            "",
+            nullptr,
             EngineInterface{
                 StubEngine::Create,
                 StubEngine::Shutdown,
@@ -81,6 +87,7 @@ struct StubOS : public OSContext
             }
         };
     }
+    void EngineRelease(EngineModule&) {}
     bool EngineReloadRequired(EngineModule const&) { return false; }
     void EngineReloadModule(EngineModule&) {}
 };

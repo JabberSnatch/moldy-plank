@@ -16,7 +16,9 @@ int main(int argc, char const** argv)
     bstk::EngineInterface::context_t* engine =
         interface->Create(mainwindow.hinstance, mainwindow.hwindow);
 
-    while (oscontext->PumpEvents(mainwindow))
+    iotk::input_t inputState{};
+
+    while (oscontext->PumpEvents(mainwindow, inputState))
     {
         if (oscontext->EngineReloadRequired(module))
         {
@@ -24,7 +26,7 @@ int main(int argc, char const** argv)
             interface->Reload(engine);
         }
 
-        interface->LogicUpdate(engine, &mainwindow.state);
+        interface->LogicUpdate(engine, &inputState);
         interface->DrawFrame(engine);
     }
 

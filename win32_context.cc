@@ -52,7 +52,7 @@ bstk::OSWindow Win32Context::CreateWindow()
     winclass.hIconSm = NULL;
 
     if (!RegisterClassExA(&winclass))
-        return bstk::OSWindow{ 0ull, 0ull, iotk::input_t{} };
+        return bstk::OSWindow{ 0ull, 0ull };
 
     DWORD styleex = WS_EX_APPWINDOW;
     DWORD style = WS_VISIBLE | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
@@ -71,15 +71,17 @@ bstk::OSWindow Win32Context::CreateWindow()
                                 hinstance,
                                 NULL);
     if (!hwnd)
-        return bstk::OSWindow{ 0ull, 0ull, iotk::input_t{} };
+        return bstk::OSWindow{ 0ull, 0ull };
 
     SetPropA(hwnd, "Win32Context", this);
 
-    return bstk::OSWindow{ (uint64_t)hinstance, (uint64_t)hwnd, iotk::input_t{} };
+    return bstk::OSWindow{ (uint64_t)hinstance, (uint64_t)hwnd };
 }
 
-bool Win32Context::PumpEvents(bstk::OSWindow& _window)
+bool Win32Context::PumpEvents(bstk::OSWindow const& _window, iotk::input_t &_state)
 {
+    (void)_state;
+
     MSG msg{ 0 };
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
     {

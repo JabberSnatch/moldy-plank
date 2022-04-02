@@ -1,4 +1,5 @@
 #include "iotk.hpp"
+#include "vktk.hpp"
 
 #include <iostream>
 
@@ -14,9 +15,10 @@ struct context_t
 
 extern "C" {
 
-    DLLEXPORT context_t* ModuleInterface_Create(hinstance_t, hwindow_t)
+    DLLEXPORT context_t* ModuleInterface_Create(hinstance_t _hinstance, hwindow_t _hwindow)
     {
         std::cout << "Create" << std::endl;
+        vktk::CreateContext(_hinstance, _hwindow);
         return nullptr;
     }
 

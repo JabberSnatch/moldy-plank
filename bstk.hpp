@@ -40,7 +40,6 @@ struct OSWindow
 {
     uint64_t hinstance;
     uint64_t hwindow;
-    iotk::input_t state;
 };
 
 struct OSContext
@@ -51,7 +50,7 @@ struct OSContext
     OSContext& operator=(OSContext const&) = delete;
 
     virtual OSWindow CreateWindow() = 0;
-    virtual bool PumpEvents(OSWindow& _window) = 0;
+    virtual bool PumpEvents(OSWindow const& _window, iotk::input_t& _state) = 0;
 
     virtual EngineModule EngineLoad(std::string const& _path, std::string const& _lockfile) = 0;
     virtual void EngineRelease(EngineModule& _module) = 0;
@@ -72,7 +71,7 @@ struct StubOS : public OSContext
 {
     StubOS() = default;
     OSWindow CreateWindow() override { return OSWindow{}; }
-    bool PumpEvents(OSWindow&) override { return false; }
+    bool PumpEvents(OSWindow const&, iotk::input_t&) override { return false; }
     EngineModule EngineLoad(std::string const&, std::string const&) override {
         return EngineModule{
             "",

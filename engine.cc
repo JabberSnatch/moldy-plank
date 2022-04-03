@@ -10,7 +10,7 @@ using hwindow_t = uint64_t;
 
 struct context_t
 {
-    int dummy;
+    vktk::Context* renderContext;
 };
 
 extern "C" {
@@ -18,13 +18,16 @@ extern "C" {
     DLLEXPORT context_t* ModuleInterface_Create(hinstance_t _hinstance, hwindow_t _hwindow)
     {
         std::cout << "Create" << std::endl;
-        vktk::CreateContext(_hinstance, _hwindow);
-        return nullptr;
+        context_t* context = new context_t{};
+        context->renderContext = vktk::CreateContext(_hinstance, _hwindow);
+        return context;
     }
 
-    DLLEXPORT void ModuleInterface_Shutdown(context_t*)
+    DLLEXPORT void ModuleInterface_Shutdown(context_t* _context)
     {
         std::cout << "Shutdown" << std::endl;
+        vktk::DeleteContext(_context->renderContext);
+        delete _context;
     }
 
     DLLEXPORT void ModuleInterface_Reload(context_t*)

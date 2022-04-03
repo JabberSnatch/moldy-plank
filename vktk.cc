@@ -26,6 +26,12 @@ static char const* kInstanceExtensions[] = {
 static std::uint32_t const kInstanceExtCount =
     sizeof(kInstanceExtensions) / sizeof(kInstanceExtensions[0]);
 
+static char const* kDeviceExtensions[] = {
+    "VK_KHR_swapchain"
+};
+static std::uint32_t const kDeviceExtCount =
+    sizeof(kDeviceExtensions) / sizeof(kDeviceExtensions[0]);
+
 } // namespace
 
 #define CHECKCALL(func, ...)                                           \
@@ -35,31 +41,59 @@ static std::uint32_t const kInstanceExtCount =
             std::cout << #func " " << VkResultToStr(vkr) << std::endl; \
     }
 
-#define kRequiredInstanceProcs(x, inst, table)          \
-    x(GetPhysicalDeviceSurfaceSupportKHR, inst, table)
+#define GetInstanceProcAddress(proc, inst, table)                       \
+    table.##proc = (PFN_vk##proc)vkGetInstanceProcAddr(inst, "vk" #proc); \
 
-#define GET_INSTANCE_PROC_ADDR(proc, inst, table)                 \
-    table.##proc =                                                \
-        (PFN_vk##proc)vkGetInstanceProcAddr(inst, "vk" #proc);    \
+#define GetDeviceProcAddress(proc, dev, table)                          \
+    table.##proc = (PFN_vk##proc)vkGetDeviceProcAddr(dev, "vk" #proc);  \
 
-#define GET_DEVICE_PROC_ADDR(proc, dev, table)                    \
-    table.##proc =                                                \
-        (PFN_vk##proc)vkGetDeviceProcAddr(dev, "vk" #proc);       \
 
-#define FPTableEntry(proc, inst, table)         \
-    PFN_vk##proc proc = nullptr;
+#define kRequiredInstanceProcs(x)               \
+    x(GetPhysicalDeviceSurfaceCapabilitiesKHR)  \
+    x(GetPhysicalDeviceSurfaceFormatsKHR)       \
+    x(GetPhysicalDeviceSurfaceSupportKHR)       \
+
+#define kRequiredDeviceProcs(x)                 \
+    x(CreateSwapchainKHR)                       \
+    x(DestroySwapchainKHR)                      \
+
+#define GetInstanceProcAddress_XMacro(proc)     \
+    GetInstanceProcAddress(proc, INSTANCE, TABLE)
+
+#define GetDeviceProcAddress_XMacro(proc)       \
+    GetDeviceProcAddress(proc, DEVICE, TABLE)
 
 namespace vktk
 {
 
-static struct FPTable
+struct FPTable
 {
-    kRequiredInstanceProcs(FPTableEntry, , )
-} fp;
+#define AsFPTableEntry(proc) PFN_vk##proc proc = nullptr;
+    kRequiredInstanceProcs(AsFPTableEntry)
 
-void CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow)
+    kRequiredDeviceProcs(AsFPTableEntry)
+#undef AsFPTableEntry
+};
+
+struct ContextData
 {
-    VkInstance instance{};
+    FPTable fp;
+
+    VkInstance instance;
+    VkPhysicalDevice physical_device;
+    VkPhysicalDeviceMemoryProperties memory_properties;
+
+    VkSurfaceKHR surface;
+    VkDevice device;
+    VkQueue present_queue;
+
+    VkSwapchainKHR swapchain;
+};
+
+Context* CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow)
+{
+    ContextData* ctxt = new ContextData{};
+
     {
         VkApplicationInfo app_info{};
         app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -80,19 +114,22 @@ void CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow)
         instance_info.enabledExtensionCount = kInstanceExtCount;
         instance_info.ppEnabledExtensionNames = kInstanceExtensions;
 
-        CHECKCALL(vkCreateInstance, &instance_info, nullptr, &instance);
+        CHECKCALL(vkCreateInstance, &instance_info, nullptr, &ctxt->instance);
     }
 
-    kRequiredInstanceProcs(GET_INSTANCE_PROC_ADDR, instance, fp);
+    #define INSTANCE ctxt->instance
+    #define TABLE ctxt->fp
+    kRequiredInstanceProcs(GetInstanceProcAddress_XMacro)
+    #undef INSTANCE
+    #undef TABLE
 
-    VkPhysicalDevice physical_device{};
     {
         uint32_t dev_count = 1u;
-        CHECKCALL(vkEnumeratePhysicalDevices, instance, &dev_count, &physical_device);
+        CHECKCALL(vkEnumeratePhysicalDevices, ctxt->instance, &dev_count, &ctxt->physical_device);
+        vkGetPhysicalDeviceMemoryProperties(ctxt->physical_device, &ctxt->memory_properties);
     }
 
 #ifdef _WIN32
-    VkSurfaceKHR surface{};
     {
         VkWin32SurfaceCreateInfoKHR create_info{};
         create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -100,26 +137,24 @@ void CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow)
         create_info.flags = 0;
         create_info.hinstance = (HINSTANCE)_hinstance;
         create_info.hwnd = (HWND)_hwindow;
-        CHECKCALL(vkCreateWin32SurfaceKHR, instance, &create_info, nullptr, &surface);
+        CHECKCALL(vkCreateWin32SurfaceKHR, ctxt->instance, &create_info, nullptr, &ctxt->surface);
     }
-#else
 #endif
 
-    VkDevice device{};
     {
         std::uint32_t queueFamilyCount = 0u;
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount,
+        vkGetPhysicalDeviceQueueFamilyProperties(ctxt->physical_device, &queueFamilyCount,
                                                  nullptr);
         std::vector<VkQueueFamilyProperties> queue_properties{ queueFamilyCount };
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queueFamilyCount,
+        vkGetPhysicalDeviceQueueFamilyProperties(ctxt->physical_device, &queueFamilyCount,
                                                  queue_properties.data());
 
         std::uint32_t queueIndex = ~0u;
         for (std::uint32_t index = 0u; index < queue_properties.size(); ++index)
         {
             VkBool32 canPresent = VK_FALSE;
-            fp.GetPhysicalDeviceSurfaceSupportKHR(physical_device, index, surface,
-                                                  &canPresent);
+            ctxt->fp.GetPhysicalDeviceSurfaceSupportKHR(ctxt->physical_device, index, ctxt->surface,
+                                                        &canPresent);
             if (queue_properties[index].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
                 canPresent == VK_TRUE)
             {
@@ -145,18 +180,83 @@ void CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow)
         device_info.pQueueCreateInfos = &queue_info;
         device_info.enabledLayerCount = 0;
         device_info.ppEnabledLayerNames = nullptr;
-        device_info.enabledExtensionCount = 0;
-        device_info.ppEnabledExtensionNames = nullptr;
+        device_info.enabledExtensionCount = kDeviceExtCount;
+        device_info.ppEnabledExtensionNames = kDeviceExtensions;
         device_info.pEnabledFeatures = nullptr;
 
-        CHECKCALL(vkCreateDevice, physical_device, &device_info, nullptr, &device);
+        CHECKCALL(vkCreateDevice, ctxt->physical_device, &device_info, nullptr, &ctxt->device);
+
+        vkGetDeviceQueue(ctxt->device, queueIndex, 0, &ctxt->present_queue);
     }
 
-    vkDestroyDevice(device, nullptr);
+    #define DEVICE ctxt->device
+    #define TABLE ctxt->fp
+    kRequiredDeviceProcs(GetDeviceProcAddress_XMacro)
+    #undef DEVICE
+    #undef TABLE
+
+    {
+        VkFormat swapchain_format{};
+        VkColorSpaceKHR color_space{};
+        {
+            std::uint32_t format_count = 1;
+            VkSurfaceFormatKHR surface_format{};
+            ctxt->fp.GetPhysicalDeviceSurfaceFormatsKHR(ctxt->physical_device,
+                                                        ctxt->surface,
+                                                        &format_count, &surface_format);
+
+            swapchain_format = surface_format.format;
+            if (surface_format.format == VK_FORMAT_UNDEFINED)
+                swapchain_format = VK_FORMAT_B8G8R8A8_UNORM;
+
+            color_space = surface_format.colorSpace;
+        }
+
+        VkSurfaceCapabilitiesKHR surface_capabilities{};
+        ctxt->fp.GetPhysicalDeviceSurfaceCapabilitiesKHR(ctxt->physical_device,
+                                                         ctxt->surface,
+                                                         &surface_capabilities);
+
+        VkExtent2D swapchain_extent = surface_capabilities.currentExtent;
+        if (surface_capabilities.currentExtent.width = (uint32_t)-1)
+            swapchain_extent = surface_capabilities.minImageExtent;
+
+        VkSwapchainCreateInfoKHR swapchain_info{};
+        swapchain_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapchain_info.pNext = nullptr;
+        swapchain_info.flags = 0;
+        swapchain_info.surface = ctxt->surface;
+        swapchain_info.minImageCount = 2;
+        swapchain_info.imageFormat = swapchain_format;
+        swapchain_info.imageColorSpace = color_space;
+        swapchain_info.imageExtent = swapchain_extent;
+        swapchain_info.imageArrayLayers = 1;
+        swapchain_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        swapchain_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapchain_info.queueFamilyIndexCount = 0;
+        swapchain_info.pQueueFamilyIndices = nullptr;
+        swapchain_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        swapchain_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapchain_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        swapchain_info.clipped = VK_TRUE;
+        swapchain_info.oldSwapchain = VK_NULL_HANDLE;
+
+        CHECKCALL(ctxt->fp.CreateSwapchainKHR, ctxt->device, &swapchain_info, nullptr, &ctxt->swapchain);
+    }
+
+    return (Context*)ctxt;
+}
+
+void DeleteContext(Context* _context)
+{
+    ContextData* ctxt = (ContextData*)_context;
+    ctxt->fp.DestroySwapchainKHR(ctxt->device, ctxt->swapchain, nullptr);
+    vkDestroyDevice(ctxt->device, nullptr);
 #ifdef _WIN32
-    vkDestroySurfaceKHR(instance, surface, nullptr);
+    vkDestroySurfaceKHR(ctxt->instance, ctxt->surface, nullptr);
 #endif
-    vkDestroyInstance(instance, nullptr);
+    vkDestroyInstance(ctxt->instance, nullptr);
+    delete ctxt;
 }
 
 } // namespace vktk

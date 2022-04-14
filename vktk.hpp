@@ -2,12 +2,81 @@
 
 #include <cstdint>
 
+#include <vector>
+
+#ifdef _WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#endif
+#include <vulkan/vulkan.h>
+
+#define CHECKCALL(func, ...)                                           \
+    {                                                                  \
+        VkResult const vkr = func(__VA_ARGS__);                        \
+        if (vkr != VK_SUCCESS)                                         \
+            std::cout << #func " " << VkResultToStr(vkr) << std::endl; \
+    }
+
+#define GetInstanceProcAddress(proc, inst, table)                       \
+    table.##proc = (PFN_vk##proc)vkGetInstanceProcAddr(inst, "vk" #proc); \
+
+#define GetDeviceProcAddress(proc, dev, table)                          \
+    table.##proc = (PFN_vk##proc)vkGetDeviceProcAddr(dev, "vk" #proc);  \
+
+
+#define kRequiredInstanceProcs(x)               \
+    x(GetPhysicalDeviceSurfaceCapabilitiesKHR)  \
+    x(GetPhysicalDeviceSurfaceFormatsKHR)       \
+    x(GetPhysicalDeviceSurfaceSupportKHR)       \
+
+#define kRequiredDeviceProcs(x)                 \
+    x(CreateSwapchainKHR)                       \
+    x(DestroySwapchainKHR)                      \
+    x(GetSwapchainImagesKHR)                    \
+
+#define GetInstanceProcAddress_XMacro(proc)     \
+    GetInstanceProcAddress(proc, INSTANCE, TABLE)
+
+#define GetDeviceProcAddress_XMacro(proc)       \
+    GetDeviceProcAddress(proc, DEVICE, TABLE)
+
 namespace vktk
 {
 
-struct Context;
+static char const* VkResultToStr(VkResult _vkResult);
 
-Context* CreateContext(std::uint64_t _hinstance, std::uint64_t _hwindow);
-void DeleteContext(Context* _context);
+struct FPTable
+{
+#define AsFPTableEntry(proc) PFN_vk##proc proc = nullptr;
+    kRequiredInstanceProcs(AsFPTableEntry)
+
+    kRequiredDeviceProcs(AsFPTableEntry)
+#undef AsFPTableEntry
+};
+
+struct Context
+{
+    Context(std::uint64_t _hinstance, std::uint64_t _hwindow);
+    ~Context();
+
+    VkShaderModule CompileShader_GLSL(VkShaderStageFlagBits _shaderStage,
+                                      char const* _shaderName,
+                                      char const* _code,
+                                      size_t _codeSize);
+
+    FPTable fp = {};
+
+    VkInstance instance = {};
+    VkPhysicalDevice physical_device = {};
+    VkPhysicalDeviceMemoryProperties memory_properties = {};
+
+    VkSurfaceKHR surface = {};
+    VkDevice device = {};
+    VkQueue present_queue = {};
+
+    VkSwapchainKHR swapchain = {};
+    std::vector<VkImage> swapchain_images = {};
+    std::vector<VkImageView> swapchain_views = {};
+    std::vector<VkFramebuffer> swapchain_framebuffers = {};
+};
 
 } // namespace vktk

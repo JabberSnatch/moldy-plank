@@ -1,11 +1,12 @@
-cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 
 project(engineloader)
 
-find_package(Vulkan)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+find_package(Vulkan REQUIRED)
 add_library(vktk STATIC vktk.cc)
-target_link_libraries(vktk Vulkan::Vulkan)
+target_link_libraries(vktk Vulkan::Vulkan Vulkan::shaderc)
 set_property(TARGET vktk PROPERTY CXX_STANDARD 20)
 
 add_library(engine MODULE engine.cc)

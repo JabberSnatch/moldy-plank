@@ -1,13 +1,15 @@
+#ifdef _WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <windows.h>
+#endif
+#include <vulkan/vulkan.h>
+
 #include "vktk.hpp"
 
 #include <shaderc/shaderc.hpp>
 
 #include <iostream>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace
 {
@@ -32,7 +34,7 @@ static std::uint32_t const kDeviceExtCount =
 namespace vktk
 {
 
-Context::Context(std::uint64_t _hinstance, std::uint64_t _hwindow)
+Context::Context(uint64_t _hinstance, uint64_t _hwindow)
 {
     {
         VkApplicationInfo app_info{};
@@ -136,7 +138,6 @@ Context::Context(std::uint64_t _hinstance, std::uint64_t _hwindow)
     #undef TABLE
 
     {
-        VkFormat swapchain_format{};
         VkColorSpaceKHR color_space{};
         {
             std::uint32_t format_count = 1;
@@ -277,7 +278,7 @@ VkShaderModule Context::CompileShader_GLSL(VkShaderStageFlagBits _shaderStage,
     return output;
 }
 
-static char const* VkResultToStr(VkResult _vkResult)
+char const* VkResultToStr(VkResult _vkResult)
 {
     switch(_vkResult)
     {

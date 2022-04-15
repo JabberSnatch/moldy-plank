@@ -104,12 +104,20 @@ if(WIN32)
     find_file(Vulkan_SPIRV_TOOLS_LIBRARY
       NAMES SPIRV-Tools-shared.dll
       PATHS "$ENV{VULKAN_SDK}/Bin")
-    find_library(Vulkan_SHADERC_LIBRARY
+
+    find_library(Vulkan_SHADERC_DEBUG_LIBRARY
+      NAMES shaderc_combinedd
+      HINTS
+        "$ENV{VULKAN_SDK}/Lib"
+        "$ENV{VULKAN_SDK}/Bin"
+      )
+    find_library(Vulkan_SHADERC_RELEASE_LIBRARY
       NAMES shaderc_combined
-      PATHS
-	  "$ENV{VULKAN_SDK}/Lib"
-	  "$ENV{VULKAN_SDK}/Bin"
-	  )
+      HINTS
+        "$ENV{VULKAN_SDK}/Lib"
+        "$ENV{VULKAN_SDK}/Bin"
+      )
+
     find_library(Vulkan_GLSLANG_SPIRV_LIBRARY
       NAMES SPIRV
       HINTS
@@ -169,12 +177,20 @@ if(WIN32)
     find_file(Vulkan_SPIRV_TOOLS_LIBRARY
       NAMES SPIRV-Tools-shared
       HINTS "$ENV{VULKAN_SDK}/Bin32")
-    find_file(Vulkan_SHADERC_LIBRARY
+
+    find_library(Vulkan_SHADERC_DEBUG_LIBRARY
+      NAMES shaderc_combinedd
+      HINTS
+        "$ENV{VULKAN_SDK}/Lib32"
+        "$ENV{VULKAN_SDK}/Bin32"
+      )
+    find_library(Vulkan_SHADERC_RELEASE_LIBRARY
       NAMES shaderc_combined
       HINTS
-	  "$ENV{VULKAN_SDK}/Lib32"
-	  "$ENV{VULKAN_SDK}/Bin32"
-	  )
+        "$ENV{VULKAN_SDK}/Lib32"
+        "$ENV{VULKAN_SDK}/Bin32"
+      )
+
     find_library(Vulkan_GLSLANG_SPIRV_LIBRARY
       NAMES SPIRV
       HINTS
@@ -230,9 +246,14 @@ else()
   find_library(Vulkan_SPIRV_TOOLS_LIBRARY
     NAMES SPIRV-Tools-shared
     HINTS "$ENV{VULKAN_SDK}/Lib")
-  find_library(Vulkan_SHADERC_LIBRARY
+
+  find_library(Vulkan_SHADERC_DEBUG_LIBRARY
+    NAMES shaderc_combinedd
+    HINTS "$ENV{VULKAN_SDK}/Lib")
+  find_library(Vulkan_SHADERC_RELEASE_LIBRARY
     NAMES shaderc_combined
     HINTS "$ENV{VULKAN_SDK}/Lib")
+
   find_library(Vulkan_GLSLANG_SPIRV_LIBRARY
     NAMES SPIRV
     HINTS "$ENV{VULKAN_SDK}/Lib")
@@ -339,16 +360,25 @@ if(Vulkan_FOUND AND Vulkan_SPIRV_TOOLS_LIBRARY AND NOT TARGET Vulkan::SPIRV-Tool
   )
 endif()
 
-if(Vulkan_FOUND AND Vulkan_SHADERC_LIBRARY AND NOT TARGET Vulkan::shaderc)
+if(Vulkan_FOUND AND (Vulkan_SHADERC_DEBUG_LIBRARY OR Vulkan_SHADERC_RELEASE_LIBRARY) AND NOT TARGET Vulkan::shaderc)
   add_library(Vulkan::shaderc STATIC IMPORTED)
+  set(config_types)
+  if(Vulkan_SHADERC_DEBUG_LIBRARY)
+    list(APPEND config_types Debug)
+  endif()
+  if(Vulkan_SHADERC_RELEASE_LIBRARY)
+    list(APPEND config_types Release)
+  endif()
   set_target_properties(Vulkan::shaderc PROPERTIES
-    IMPORTED_LOCATION "${Vulkan_SHADERC_LIBRARY}"
+    IMPORTED_CONFIGURATIONS "${config_types}"
+    IMPORTED_LOCATION_DEBUG "${Vulkan_SHADERC_DEBUG_LIBRARY}"
+    IMPORTED_LOCATION_RELEASE "${Vulkan_SHADERC_RELEASE_LIBRARY}"
+    MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
     INTERFACE_INCLUDE_DIRECTORIES "${Vulkan_INCLUDE_DIRS}")
-  target_link_libraries(Vulkan::shaderc)
 
   find_package_message(Vulkan::shaderc
-    "Found Vulkan shaderc library: ${Vulkan_SHADERC_LIBRARY}"
-    "[${Vulkan_SHADERC_LIBRARY}][${Vulkan_INCLUDE_DIRS}]"
+    "Found Vulkan shaderc library: ${Vulkan_SHADERC_RELEASE_LIBRARY} / ${Vulkan_SHADERC_DEBUG_LIBRARY}"
+    "[${Vulkan_SHADERC_RELEASE_LIBRARY}][${Vulkan_SHADERC_DEBUG_LIBRARY}][${Vulkan_INCLUDE_DIRS}]"
   )
 endif()
 

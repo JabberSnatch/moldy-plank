@@ -44,7 +44,6 @@ enum fMouseButton
 
 struct input_t
 {
-    int32_t screen_size[2];
     float time_delta;
 
     bool key_down[256];

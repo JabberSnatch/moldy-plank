@@ -35,6 +35,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 bstk::OSWindow Win32Context::CreateWindow()
 {
+    constexpr uint32_t kWidth = 1280;
+    constexpr uint32_t kHeight = 720;
+
+    bstk::OSWindow output = {};
+
     HINSTANCE hinstance = GetModuleHandleA(NULL);
 
     WNDCLASSEXA winclass{};
@@ -52,11 +57,16 @@ bstk::OSWindow Win32Context::CreateWindow()
     winclass.hIconSm = NULL;
 
     if (!RegisterClassExA(&winclass))
-        return bstk::OSWindow{ 0ull, 0ull };
+        return output;
 
     DWORD styleex = WS_EX_APPWINDOW;
-    DWORD style = WS_VISIBLE | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME;
-    RECT canvas_rect = { 0, 0, 1280, 720 };
+    DWORD style = WS_OVERLAPPEDWINDOW
+        | WS_VISIBLE
+        | WS_SYSMENU
+        | WS_MINIMIZEBOX
+        | WS_MAXIMIZEBOX
+        | WS_THICKFRAME;
+    RECT canvas_rect = { 0, 0, kWidth, kHeight };
     AdjustWindowRectEx(&canvas_rect, style, FALSE, styleex);
 
     HWND hwnd = CreateWindowExA(styleex,
@@ -71,11 +81,16 @@ bstk::OSWindow Win32Context::CreateWindow()
                                 hinstance,
                                 NULL);
     if (!hwnd)
-        return bstk::OSWindow{ 0ull, 0ull };
+        return output;
 
     SetPropA(hwnd, "Win32Context", this);
 
-    return bstk::OSWindow{ (uint64_t)hinstance, (uint64_t)hwnd };
+    output.hinstance = (uint64_t)hinstance;
+    output.hwindow = (uint64_t)hwnd;
+    output.size[0] = kWidth;
+    output.size[1] = kHeight;
+
+    return output;
 }
 
 bool Win32Context::PumpEvents(bstk::OSWindow const& _window, iotk::input_t &_state)

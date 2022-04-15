@@ -9,13 +9,21 @@
 namespace bstk
 {
 
+using hinstance_t = uint64_t;
+using hwindow_t = uint64_t;
+
+struct OSWindow
+{
+    hinstance_t hinstance;
+    hwindow_t hwindow;
+    uint32_t size[2];
+};
+
 struct EngineInterface
 {
     using context_t = void;
-    using hinstance_t = uint64_t;
-    using hwindow_t = uint64_t;
 
-    using Create_t = context_t* (*)(hinstance_t, hwindow_t);
+    using Create_t = context_t* (*)(OSWindow const*);
     using Shutdown_t = void (*)(context_t*);
     using Reload_t = void (*)(context_t*);
     using LogicUpdate_t = void (*)(context_t*, iotk::input_t const*);
@@ -36,12 +44,6 @@ struct EngineModule
     EngineInterface interface;
 };
 
-struct OSWindow
-{
-    uint64_t hinstance;
-    uint64_t hwindow;
-};
-
 struct OSContext
 {
     OSContext() = default;
@@ -60,7 +62,7 @@ struct OSContext
 
 namespace StubEngine
 {
-inline void* Create(uint64_t, uint64_t) { return nullptr; }
+inline void* Create(OSWindow const*) { return nullptr; }
 inline void Shutdown(void*) {}
 inline void Reload(void*) {}
 inline void LogicUpdate(void*, iotk::input_t const*) {}
@@ -101,4 +103,4 @@ inline std::unique_ptr<OSContext> CreateContext()
 }
 #endif
 
-}
+} // namespace bstk

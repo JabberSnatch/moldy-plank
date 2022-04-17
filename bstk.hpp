@@ -17,6 +17,7 @@ struct OSWindow
     hinstance_t hinstance;
     hwindow_t hwindow;
     uint32_t size[2];
+    void* platform_data;
 };
 
 struct EngineInterface
@@ -88,12 +89,12 @@ struct StubOS : public OSContext
             }
         };
     }
-    void EngineRelease(EngineModule&) {}
-    bool EngineReloadRequired(EngineModule const&) { return false; }
-    void EngineReloadModule(EngineModule&) {}
+    void EngineRelease(EngineModule&) override {}
+    bool EngineReloadRequired(EngineModule const&) override { return false; }
+    void EngineReloadModule(EngineModule&) override {}
 };
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__unix__)
 std::unique_ptr<OSContext> CreateContext();
 #else
 // Implementation is platform-dependant

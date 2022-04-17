@@ -13,16 +13,46 @@ add_library(engine MODULE engine.cc)
 target_link_libraries(engine vktk)
 set_property(TARGET engine PROPERTY CXX_STANDARD 20)
 
-# Win32 custom hot-reload shenaniggans
-target_link_options(engine PRIVATE "/MANIFEST:NO" "-PDB:engine_%random%.pdb")
-add_custom_command(TARGET engine PRE_BUILD
-                   COMMAND echo building > build.lock)
-add_custom_command(TARGET engine PRE_BUILD
-                   COMMAND if exist engine_*.pdb del engine_*.pdb)
-add_custom_command(TARGET engine PRE_BUILD
-                   COMMAND if exist engine.dl_* del engine.dl_*)
-add_custom_command(TARGET engine POST_BUILD
-                   COMMAND del build.lock)
+set(PLATFORM_SOURCES)
+set(PLATFORM_LIBRARIES)
 
-add_executable(loader main.cc win32_context.cc)
+if (WIN32)
+  # Win32 custom hot-reload shenaniggans
+  target_link_options(engine PRIVATE "/MANIFEST:NO" "-PDB:engine_%random%.pdb")
+
+  add_custom_command(
+	TARGET engine PRE_BUILD
+    COMMAND echo building > build.lock)
+  add_custom_command(
+	TARGET engine PRE_BUILD
+    COMMAND if exist engine_*.pdb del engine_*.pdb)
+  add_custom_command(
+	TARGET engine PRE_BUILD
+    COMMAND if exist engine.dl_* del engine.dl_*)
+  add_custom_command(
+	TARGET engine POST_BUILD
+    COMMAND del build.lock)
+
+  list(APPEND PLATFORM_SOURCES win32_context.cc)
+endif()
+
+if (UNIX)
+  target_compile_options(vktk PRIVATE "-fPIC")
+  target_compile_options(engine PRIVATE "-fvisibility=hidden")
+  find_package(X11 REQUIRED)
+  list(APPEND PLATFORM_SOURCES xlib_context.cc)
+  list(APPEND PLATFORM_LIBRARIES dl X11 X11::Xfixes)
+
+  add_custom_command(
+	TARGET engine PRE_BUILD
+	COMMAND echo building > build.lock)
+  add_custom_command(
+	TARGET engine POST_BUILD
+	COMMAND rm build.lock)
+endif()
+
+add_executable(loader main.cc ${PLATFORM_SOURCES})
 set_property(TARGET loader PROPERTY CXX_STANDARD 20)
+if (PLATFORM_LIBRARIES)
+  target_link_libraries(loader PRIVATE ${PLATFORM_LIBRARIES})
+endif()

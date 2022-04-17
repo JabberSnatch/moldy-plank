@@ -1,7 +1,13 @@
-#ifdef _WIN32
+#if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <windows.h>
 #endif
+
+#if defined(__unix__)
+#define VK_USE_PLATFORM_XLIB_KHR
+#include <X11/Xlib.h>
+#endif
+
 #include <vulkan/vulkan.h>
 
 #include "vktk.hpp"
@@ -18,6 +24,10 @@ static char const* kInstanceExtensions[] = {
     "VK_KHR_surface",
 #ifdef _WIN32
     "VK_KHR_win32_surface",
+#endif
+
+#ifdef __unix__
+    "VK_KHR_xlib_surface",
 #endif
 };
 static std::uint32_t const kInstanceExtCount =
@@ -66,9 +76,25 @@ Context::Context(uint64_t _hinstance, uint64_t _hwindow)
     #undef TABLE
 
     {
-        uint32_t dev_count = 1u;
-        CHECKCALL(vkEnumeratePhysicalDevices, instance, &dev_count, &physical_device);
-        vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+        uint32_t dev_count = 0u;
+        vkEnumeratePhysicalDevices(instance, &dev_count, nullptr);
+        std::vector<VkPhysicalDevice> availableDevices{ dev_count };
+        vkEnumeratePhysicalDevices(instance, &dev_count, availableDevices.data());
+
+        for (uint32_t devIndex = 0u; devIndex < dev_count; ++devIndex)
+        {
+            VkPhysicalDeviceProperties properties{};
+            VkPhysicalDeviceMemoryProperties memoryProperties{};
+            vkGetPhysicalDeviceProperties(availableDevices[devIndex], &properties);
+            vkGetPhysicalDeviceMemoryProperties(availableDevices[devIndex], &memoryProperties);
+
+            if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            {
+                physical_device = availableDevices[devIndex];
+                memory_properties = memoryProperties;
+                break;
+            }
+        }
     }
 
 #ifdef _WIN32
@@ -80,6 +106,18 @@ Context::Context(uint64_t _hinstance, uint64_t _hwindow)
         create_info.hinstance = (HINSTANCE)_hinstance;
         create_info.hwnd = (HWND)_hwindow;
         CHECKCALL(vkCreateWin32SurfaceKHR, instance, &create_info, nullptr, &surface);
+    }
+#endif
+
+#ifdef __unix__
+    {
+        VkXlibSurfaceCreateInfoKHR create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+        create_info.pNext = nullptr;
+        create_info.flags = 0u;
+        create_info.dpy = (Display*)_hinstance;
+        create_info.window = (Window)_hwindow;
+        CHECKCALL(vkCreateXlibSurfaceKHR, instance, &create_info, nullptr, &surface);
     }
 #endif
 
@@ -159,7 +197,7 @@ Context::Context(uint64_t _hinstance, uint64_t _hwindow)
                                                    &surface_capabilities);
 
         VkExtent2D swapchain_extent = surface_capabilities.currentExtent;
-        if (surface_capabilities.currentExtent.width = (uint32_t)-1)
+        if (surface_capabilities.currentExtent.width == (uint32_t)~0u)
             swapchain_extent = surface_capabilities.minImageExtent;
 
         VkSwapchainCreateInfoKHR swapchain_info{};
@@ -225,7 +263,7 @@ Context::~Context()
         vkDestroyImageView(device, view, nullptr);
     fp.DestroySwapchainKHR(device, swapchain, nullptr);
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__unix__)
     vkDestroySurfaceKHR(instance, surface, nullptr);
 #endif
 

@@ -5,7 +5,13 @@
 #include <cstdint>
 #include <iostream>
 
+#if defined(_WIN32)
 #define DLLEXPORT __declspec(dllexport)
+#elif defined(__unix__)
+#define DLLEXPORT __attribute__((visibility("default")))
+#else
+#define DLLEXPORT
+#endif
 
 struct context_t
 {

@@ -13,10 +13,10 @@
     }
 
 #define GetInstanceProcAddress(proc, inst, table)                       \
-    table.##proc = (PFN_vk##proc)vkGetInstanceProcAddr(inst, "vk" #proc);
+    table.proc = (PFN_vk##proc)vkGetInstanceProcAddr(inst, "vk" #proc);
 
 #define GetDeviceProcAddress(proc, dev, table)                          \
-    table.##proc = (PFN_vk##proc)vkGetDeviceProcAddr(dev, "vk" #proc);
+    table.proc = (PFN_vk##proc)vkGetDeviceProcAddr(dev, "vk" #proc);
 
 
 #define kRequiredInstanceProcs(x)               \

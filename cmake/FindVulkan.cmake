@@ -248,7 +248,7 @@ else()
     HINTS "$ENV{VULKAN_SDK}/Lib")
 
   find_library(Vulkan_SHADERC_DEBUG_LIBRARY
-    NAMES shaderc_combinedd
+    NAMES shaderc_combined
     HINTS "$ENV{VULKAN_SDK}/Lib")
   find_library(Vulkan_SHADERC_RELEASE_LIBRARY
     NAMES shaderc_combined

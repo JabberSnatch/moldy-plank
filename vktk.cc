@@ -166,6 +166,13 @@ Context::Context(uint64_t _hinstance, uint64_t _hwindow)
 
         CHECKCALL(vkCreateDevice, physical_device, &device_info, nullptr, &device);
 
+        VkCommandPoolCreateInfo command_pool_info{};
+        command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        command_pool_info.pNext = nullptr;
+        command_pool_info.flags = 0u;
+        command_pool_info.queueFamilyIndex = queueIndex;
+        CHECKCALL(vkCreateCommandPool, device, &command_pool_info, nullptr, &command_pool);
+
         vkGetDeviceQueue(device, queueIndex, 0, &present_queue);
     }
 
@@ -267,6 +274,8 @@ Context::~Context()
     vkDestroySurfaceKHR(instance, surface, nullptr);
 #endif
 
+    vkDestroyCommandPool(device, command_pool, nullptr);
+
     vkDestroyDevice(device, nullptr);
     vkDestroyInstance(instance, nullptr);
 }
@@ -314,6 +323,196 @@ VkShaderModule Context::CompileShader_GLSL(VkShaderStageFlagBits _shaderStage,
     VkShaderModule output{};
     CHECKCALL(vkCreateShaderModule, device, &create_info, nullptr, &output);
     return output;
+}
+
+VkRenderPass Context::CreateRenderPass(std::vector<RenderPassAttachment> const& _attachments)
+{
+    std::vector<VkAttachmentDescription> descriptions{};
+    descriptions.reserve(_attachments.size());
+
+    std::vector<VkAttachmentReference> references{};
+    references.reserve(_attachments.size());
+
+    for (uint32_t index = 0u; index < (uint32_t)_attachments.size(); ++index)
+    {
+        RenderPassAttachment const& attachment = _attachments[index];
+
+        VkAttachmentDescription description{};
+        description.flags = 0u;
+        description.format = attachment.format;
+        description.samples = VK_SAMPLE_COUNT_1_BIT;
+        description.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        description.initialLayout = attachment.initialLayout;
+        description.finalLayout = attachment.finalLayout;
+        descriptions.push_back(description);
+
+        VkAttachmentReference reference{};
+        reference.attachment = index;
+        reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        references.push_back(reference);
+    }
+
+    VkSubpassDescription renderSubpass{};
+    renderSubpass.flags = 0u;
+    renderSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    renderSubpass.inputAttachmentCount = 0u;
+    renderSubpass.pInputAttachments = nullptr;
+    renderSubpass.colorAttachmentCount = references.size();
+    renderSubpass.pColorAttachments = references.data();
+    renderSubpass.pResolveAttachments = nullptr;
+    renderSubpass.pDepthStencilAttachment = nullptr;
+    renderSubpass.preserveAttachmentCount = 0u;
+    renderSubpass.pPreserveAttachments = nullptr;
+
+    VkRenderPassCreateInfo renderPass{};
+    renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPass.pNext = nullptr;
+    renderPass.flags = 0u;
+    renderPass.attachmentCount = descriptions.size();
+    renderPass.pAttachments = descriptions.data();
+    renderPass.subpassCount = 1u;
+    renderPass.pSubpasses = &renderSubpass;
+    renderPass.dependencyCount = 0u;
+    renderPass.pDependencies = nullptr;
+
+    VkRenderPass render_pass{};
+    CHECKCALL(vkCreateRenderPass, device, &renderPass, nullptr, &render_pass);
+
+    return render_pass;
+}
+
+VkPipeline Context::CreatePipeline(VkPipelineLayout _layout,
+                                   VkRenderPass _renderPass,
+                                   std::vector<PipelineStage> const& _stages)
+{
+    std::vector<VkPipelineShaderStageCreateInfo> shader_stages{};
+    shader_stages.reserve(_stages.size());
+
+    for (uint32_t index = 0u; index < (uint32_t)_stages.size(); ++index)
+    {
+        VkPipelineShaderStageCreateInfo shader_stage{};
+        shader_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shader_stage.pNext = nullptr;
+        shader_stage.flags = 0u;
+        shader_stage.stage = _stages[index].stage;
+        shader_stage.module = _stages[index].module;
+        shader_stage.pName = "main";
+        shader_stage.pSpecializationInfo = nullptr;
+        shader_stages.push_back(shader_stage);
+    }
+
+    VkPipelineRasterizationStateCreateInfo rasterizationState{};
+    rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationState.pNext = nullptr;
+    rasterizationState.flags = 0u;
+    rasterizationState.depthClampEnable = VK_FALSE;
+    rasterizationState.rasterizerDiscardEnable = VK_FALSE;
+    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationState.depthBiasEnable = VK_FALSE;
+    rasterizationState.depthBiasConstantFactor = 0.f;
+    rasterizationState.depthBiasClamp = 0.f;
+    rasterizationState.depthBiasSlopeFactor = 0.f;
+    rasterizationState.lineWidth = 1.f;
+
+    VkPipelineVertexInputStateCreateInfo vertexInputState{};
+    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputState.pNext = nullptr;
+    vertexInputState.flags = 0u;
+    vertexInputState.vertexBindingDescriptionCount = 0u;
+    vertexInputState.pVertexBindingDescriptions = nullptr;
+    vertexInputState.vertexAttributeDescriptionCount = 0u;
+    vertexInputState.pVertexAttributeDescriptions = nullptr;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
+    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyState.pNext = nullptr;
+    inputAssemblyState.flags = 0u;
+    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyState.primitiveRestartEnable = VK_FALSE;
+
+    VkDynamicState states[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.pNext = nullptr;
+    dynamicState.flags = 0u;
+    dynamicState.dynamicStateCount = 2u;
+    dynamicState.pDynamicStates = states;
+
+    VkPipelineColorBlendAttachmentState blendAttachmentState{};
+    blendAttachmentState.blendEnable = VK_FALSE;
+    blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+    blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+    blendAttachmentState.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo blendState{};
+    blendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blendState.pNext = nullptr;
+    blendState.flags = 0;
+    blendState.logicOpEnable = VK_FALSE;
+    blendState.logicOp = VK_LOGIC_OP_CLEAR;
+    blendState.attachmentCount = 1;
+    blendState.pAttachments = &blendAttachmentState;
+    blendState.blendConstants[0] = 0;
+    blendState.blendConstants[1] = 0;
+    blendState.blendConstants[2] = 0;
+    blendState.blendConstants[3] = 0;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.pNext = nullptr;
+    viewportState.flags = 0u;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = nullptr;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = nullptr;
+
+    VkPipelineMultisampleStateCreateInfo multisampleState{};
+    multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampleState.pNext = nullptr;
+    multisampleState.flags = 0;
+    multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampleState.sampleShadingEnable = VK_FALSE;
+    multisampleState.minSampleShading = 0.f;
+    multisampleState.pSampleMask = nullptr;
+    multisampleState.alphaToCoverageEnable = VK_FALSE;
+    multisampleState.alphaToOneEnable = VK_FALSE;
+
+    VkGraphicsPipelineCreateInfo createPipeline{};
+    createPipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    createPipeline.pNext = nullptr;
+    createPipeline.flags = 0u;
+    createPipeline.stageCount = shader_stages.size();
+    createPipeline.pStages = shader_stages.data();
+    createPipeline.pVertexInputState = &vertexInputState;
+    createPipeline.pInputAssemblyState = &inputAssemblyState;
+    createPipeline.pTessellationState = nullptr;
+    createPipeline.pViewportState = &viewportState;
+    createPipeline.pRasterizationState = &rasterizationState;
+    createPipeline.pMultisampleState = &multisampleState;
+    createPipeline.pDepthStencilState = nullptr;
+    createPipeline.pColorBlendState = &blendState;
+    createPipeline.pDynamicState = &dynamicState;
+    createPipeline.layout = _layout;
+    createPipeline.renderPass = _renderPass;
+    createPipeline.subpass = 0;
+    createPipeline.basePipelineHandle = 0;
+    createPipeline.basePipelineIndex = 0;
+
+    VkPipeline graphics_pipeline{};
+    CHECKCALL(vkCreateGraphicsPipelines, device, VK_NULL_HANDLE,
+              1u, &createPipeline, nullptr, &graphics_pipeline);
+
+    return graphics_pipeline;
 }
 
 char const* VkResultToStr(VkResult _vkResult)

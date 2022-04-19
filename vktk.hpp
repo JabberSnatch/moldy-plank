@@ -28,6 +28,8 @@
     x(CreateSwapchainKHR)                       \
     x(DestroySwapchainKHR)                      \
     x(GetSwapchainImagesKHR)                    \
+    x(AcquireNextImageKHR)                      \
+    x(QueuePresentKHR)                          \
 
 #define GetInstanceProcAddress_XMacro(proc) GetInstanceProcAddress(proc, INSTANCE, TABLE)
 #define GetDeviceProcAddress_XMacro(proc) GetDeviceProcAddress(proc, DEVICE, TABLE)
@@ -56,6 +58,21 @@ struct Context
                                       char const* _code,
                                       size_t _codeSize);
 
+    struct RenderPassAttachment {
+        VkFormat format;
+        VkImageLayout initialLayout;
+        VkImageLayout finalLayout;
+    };
+    VkRenderPass CreateRenderPass(std::vector<RenderPassAttachment> const& _attachments);
+
+    struct PipelineStage {
+        VkShaderModule module;
+        VkShaderStageFlagBits stage;
+    };
+    VkPipeline CreatePipeline(VkPipelineLayout _layout,
+                              VkRenderPass _renderPass,
+                              std::vector<PipelineStage> const& _stages);
+
     FPTable fp = {};
 
     VkInstance instance = {};
@@ -65,6 +82,7 @@ struct Context
     VkSurfaceKHR surface = {};
     VkDevice device = {};
     VkQueue present_queue = {};
+    VkCommandPool command_pool = {};
 
     VkSwapchainKHR swapchain = {};
     VkFormat swapchain_format = {};

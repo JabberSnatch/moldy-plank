@@ -181,95 +181,10 @@ Context::Context(uint64_t _hinstance, uint64_t _hwindow)
     kRequiredDeviceProcs(GetDeviceProcAddress_XMacro)
     #undef DEVICE
     #undef TABLE
-
-    {
-        VkColorSpaceKHR color_space{};
-        {
-            std::uint32_t format_count = 1;
-            VkSurfaceFormatKHR surface_format{};
-            fp.GetPhysicalDeviceSurfaceFormatsKHR(physical_device,
-                                                  surface,
-                                                  &format_count, &surface_format);
-
-            swapchain_format = surface_format.format;
-            if (surface_format.format == VK_FORMAT_UNDEFINED)
-                swapchain_format = VK_FORMAT_B8G8R8A8_UNORM;
-
-            color_space = surface_format.colorSpace;
-        }
-
-        VkSurfaceCapabilitiesKHR surface_capabilities{};
-        fp.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device,
-                                                   surface,
-                                                   &surface_capabilities);
-
-        VkExtent2D swapchain_extent = surface_capabilities.currentExtent;
-        if (surface_capabilities.currentExtent.width == (uint32_t)~0u)
-            swapchain_extent = surface_capabilities.minImageExtent;
-
-        VkSwapchainCreateInfoKHR swapchain_info{};
-        swapchain_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        swapchain_info.pNext = nullptr;
-        swapchain_info.flags = 0;
-        swapchain_info.surface = surface;
-        swapchain_info.minImageCount = 2;
-        swapchain_info.imageFormat = swapchain_format;
-        swapchain_info.imageColorSpace = color_space;
-        swapchain_info.imageExtent = swapchain_extent;
-        swapchain_info.imageArrayLayers = 1;
-        swapchain_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        swapchain_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        swapchain_info.queueFamilyIndexCount = 0;
-        swapchain_info.pQueueFamilyIndices = nullptr;
-        swapchain_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        swapchain_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        swapchain_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-        swapchain_info.clipped = VK_TRUE;
-        swapchain_info.oldSwapchain = VK_NULL_HANDLE;
-
-        CHECKCALL(fp.CreateSwapchainKHR, device, &swapchain_info, nullptr, &swapchain);
-
-        uint32_t image_count = 0u;
-        fp.GetSwapchainImagesKHR(device, swapchain, &image_count,
-                                       nullptr);
-        swapchain_images.resize(image_count);
-        swapchain_views.resize(image_count);
-        swapchain_framebuffers.resize(image_count);
-        fp.GetSwapchainImagesKHR(device, swapchain, &image_count,
-                                 swapchain_images.data());
-
-        for (uint32_t index = 0u; index < image_count; ++index)
-        {
-            VkImageViewCreateInfo image_view_info{};
-            image_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            image_view_info.pNext = nullptr;
-            image_view_info.flags = 0;
-            image_view_info.image = swapchain_images[index];
-            image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            image_view_info.format = swapchain_format;
-            image_view_info.components = {
-                VK_COMPONENT_SWIZZLE_R,
-                VK_COMPONENT_SWIZZLE_G,
-                VK_COMPONENT_SWIZZLE_B,
-                VK_COMPONENT_SWIZZLE_A
-            };
-            image_view_info.subresourceRange = {
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                0, 1, 0, 1
-            };
-
-            CHECKCALL(vkCreateImageView, device, &image_view_info, nullptr,
-                      &swapchain_views[index]);
-        }
-    }
 }
 
 Context::~Context()
 {
-    for (VkImageView view : swapchain_views)
-        vkDestroyImageView(device, view, nullptr);
-    fp.DestroySwapchainKHR(device, swapchain, nullptr);
-
 #if defined(_WIN32) || defined(__unix__)
     vkDestroySurfaceKHR(instance, surface, nullptr);
 #endif
@@ -360,7 +275,7 @@ VkRenderPass Context::CreateRenderPass(std::vector<RenderPassAttachment> const& 
     renderSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     renderSubpass.inputAttachmentCount = 0u;
     renderSubpass.pInputAttachments = nullptr;
-    renderSubpass.colorAttachmentCount = references.size();
+    renderSubpass.colorAttachmentCount = (uint32_t)references.size();
     renderSubpass.pColorAttachments = references.data();
     renderSubpass.pResolveAttachments = nullptr;
     renderSubpass.pDepthStencilAttachment = nullptr;
@@ -371,7 +286,7 @@ VkRenderPass Context::CreateRenderPass(std::vector<RenderPassAttachment> const& 
     renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPass.pNext = nullptr;
     renderPass.flags = 0u;
-    renderPass.attachmentCount = descriptions.size();
+    renderPass.attachmentCount = (uint32_t)descriptions.size();
     renderPass.pAttachments = descriptions.data();
     renderPass.subpassCount = 1u;
     renderPass.pSubpasses = &renderSubpass;
@@ -491,7 +406,7 @@ VkPipeline Context::CreatePipeline(VkPipelineLayout _layout,
     createPipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     createPipeline.pNext = nullptr;
     createPipeline.flags = 0u;
-    createPipeline.stageCount = shader_stages.size();
+    createPipeline.stageCount = (uint32_t)shader_stages.size();
     createPipeline.pStages = shader_stages.data();
     createPipeline.pVertexInputState = &vertexInputState;
     createPipeline.pInputAssemblyState = &inputAssemblyState;
@@ -513,6 +428,129 @@ VkPipeline Context::CreatePipeline(VkPipelineLayout _layout,
               1u, &createPipeline, nullptr, &graphics_pipeline);
 
     return graphics_pipeline;
+}
+
+Swapchain Context::CreateSwapchain(uint32_t const _size[2])
+{
+    Swapchain swapchain{};
+    swapchain.size[0] = _size[0];
+    swapchain.size[1] = _size[1];
+    swapchain.vulkan = this;
+
+    VkColorSpaceKHR color_space{};
+    {
+        std::uint32_t format_count = 1;
+        VkSurfaceFormatKHR surface_format{};
+        fp.GetPhysicalDeviceSurfaceFormatsKHR(physical_device,
+                                              surface,
+                                              &format_count, &surface_format);
+
+        swapchain.format = surface_format.format;
+        if (surface_format.format == VK_FORMAT_UNDEFINED)
+            swapchain.format = VK_FORMAT_B8G8R8A8_UNORM;
+
+        color_space = surface_format.colorSpace;
+    }
+
+    swapchain.render_pass = CreateRenderPass(
+        {
+            { swapchain.format,
+              VK_IMAGE_LAYOUT_UNDEFINED,
+              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR }
+        } );
+
+    VkSurfaceCapabilitiesKHR surface_capabilities{};
+    fp.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device,
+                                               surface,
+                                               &surface_capabilities);
+
+    VkExtent2D swapchain_extent = surface_capabilities.currentExtent;
+    if (surface_capabilities.currentExtent.width == (uint32_t)~0u)
+        swapchain_extent = surface_capabilities.minImageExtent;
+
+    VkSwapchainCreateInfoKHR swapchain_info{};
+    swapchain_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_info.pNext = nullptr;
+    swapchain_info.flags = 0;
+    swapchain_info.surface = surface;
+    swapchain_info.minImageCount = 2;
+    swapchain_info.imageFormat = swapchain.format;
+    swapchain_info.imageColorSpace = color_space;
+    swapchain_info.imageExtent = swapchain_extent;
+    swapchain_info.imageArrayLayers = 1;
+    swapchain_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swapchain_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_info.queueFamilyIndexCount = 0;
+    swapchain_info.pQueueFamilyIndices = nullptr;
+    swapchain_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    swapchain_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchain_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchain_info.clipped = VK_TRUE;
+    swapchain_info.oldSwapchain = VK_NULL_HANDLE;
+
+    CHECKCALL(fp.CreateSwapchainKHR, device, &swapchain_info, nullptr, &swapchain.handle);
+
+    uint32_t image_count = 0u;
+    fp.GetSwapchainImagesKHR(device, swapchain.handle, &image_count,
+                             nullptr);
+    swapchain.images.resize(image_count);
+    swapchain.views.resize(image_count);
+    swapchain.framebuffers.resize(image_count);
+    fp.GetSwapchainImagesKHR(device, swapchain.handle, &image_count,
+                             swapchain.images.data());
+
+    for (uint32_t index = 0u; index < image_count; ++index)
+    {
+        VkImageViewCreateInfo image_view_info{};
+        image_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        image_view_info.pNext = nullptr;
+        image_view_info.flags = 0;
+        image_view_info.image = swapchain.images[index];
+        image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        image_view_info.format = swapchain.format;
+        image_view_info.components = {
+            VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G,
+            VK_COMPONENT_SWIZZLE_B,
+            VK_COMPONENT_SWIZZLE_A
+        };
+        image_view_info.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 1, 0, 1
+        };
+
+        CHECKCALL(vkCreateImageView, device, &image_view_info, nullptr,
+                  &swapchain.views[index]);
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.pNext = nullptr;
+        framebufferInfo.flags = 0u;
+        framebufferInfo.renderPass = swapchain.render_pass;
+        framebufferInfo.attachmentCount = 1u;
+        framebufferInfo.pAttachments = &swapchain.views[index];
+        framebufferInfo.width = _size[0];
+        framebufferInfo.height = _size[1];
+        framebufferInfo.layers = 1;
+
+        CHECKCALL(vkCreateFramebuffer, device, &framebufferInfo, nullptr,
+                  &swapchain.framebuffers[index]);
+    }
+
+    return swapchain;
+}
+
+void Swapchain::Release()
+{
+    for (VkImageView view : views)
+        vkDestroyImageView(vulkan->device, view, nullptr);
+    for (VkFramebuffer framebuffer : framebuffers)
+        vkDestroyFramebuffer(vulkan->device, framebuffer, nullptr);
+    vkDestroyRenderPass(vulkan->device, render_pass, nullptr);
+
+    vulkan->fp.DestroySwapchainKHR(vulkan->device, handle, nullptr);
+
+    handle = VK_NULL_HANDLE;
 }
 
 char const* VkResultToStr(VkResult _vkResult)

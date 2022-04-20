@@ -26,7 +26,7 @@ int main(int argc, char const** argv)
         }
 
         interface->LogicUpdate(engine, &inputState);
-        interface->DrawFrame(engine);
+        interface->DrawFrame(engine, &mainwindow);
     }
 
     interface->Shutdown(engine);

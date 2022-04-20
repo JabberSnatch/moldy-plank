@@ -28,7 +28,7 @@ struct EngineInterface
     using Shutdown_t = void (*)(context_t*);
     using Reload_t = void (*)(context_t*);
     using LogicUpdate_t = void (*)(context_t*, iotk::input_t const*);
-    using DrawFrame_t = void (*)(context_t*);
+    using DrawFrame_t = void (*)(context_t*, bstk::OSWindow const*);
 
     Create_t Create;
     Shutdown_t Shutdown;
@@ -53,7 +53,7 @@ struct OSContext
     OSContext& operator=(OSContext const&) = delete;
 
     virtual OSWindow CreateWindow() = 0;
-    virtual bool PumpEvents(OSWindow const& _window, iotk::input_t& _state) = 0;
+    virtual bool PumpEvents(OSWindow& _window, iotk::input_t& _state) = 0;
 
     virtual EngineModule EngineLoad(std::string const& _path, std::string const& _lockfile) = 0;
     virtual void EngineRelease(EngineModule& _module) = 0;
@@ -67,14 +67,14 @@ inline void* Create(OSWindow const*) { return nullptr; }
 inline void Shutdown(void*) {}
 inline void Reload(void*) {}
 inline void LogicUpdate(void*, iotk::input_t const*) {}
-inline void DrawFrame(void*) {}
+inline void DrawFrame(void*, OSWindow const*) {}
 }
 
 struct StubOS : public OSContext
 {
     StubOS() = default;
     OSWindow CreateWindow() override { return OSWindow{}; }
-    bool PumpEvents(OSWindow const&, iotk::input_t&) override { return false; }
+    bool PumpEvents(OSWindow&, iotk::input_t&) override { return false; }
     EngineModule EngineLoad(std::string const&, std::string const&) override {
         return EngineModule{
             "",

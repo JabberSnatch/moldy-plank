@@ -140,7 +140,7 @@ bstk::OSWindow XlibContext::CreateWindow()
     return output;
 }
 
-bool XlibContext::PumpEvents(bstk::OSWindow const& _window, iotk::input_t& _state)
+bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
 {
     XlibWindowData const& window_data = *(XlibWindowData const*)_window.platform_data;
 

@@ -16,12 +16,32 @@
 struct context_t
 {
     bstk::OSWindow window;
+
     std::unique_ptr<vktk::Context> vulkan;
+    vktk::Swapchain swapchain;
+    VkPipeline graphics_pipeline;
 
     iotk::input_t lastInput;
 };
 
-static void EngineLoad(context_t* _context, uint32_t _size[2])
+static bool UpdateSwapchain(context_t* _context, uint32_t const _size[2])
+{
+    if (_context->swapchain.handle != VK_NULL_HANDLE
+        && (_context->swapchain.size[0] != _size[0]
+            || _context->swapchain.size[1] != _size[1]))
+        _context->swapchain.Release();
+
+    bool result = false;
+    if (_context->swapchain.handle == VK_NULL_HANDLE)
+    {
+        _context->swapchain = _context->vulkan->CreateSwapchain(_size);
+        result = true;
+    }
+
+    return result;
+}
+
+static void LoadMainPipeline(context_t* _context)
 {
     constexpr uint32_t kStageCount = 2u;
 
@@ -35,7 +55,7 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     static char const fshader[] = R"(
     #version 450
     layout(location = 0) out vec4 color;
-    void main() { color = vec4(1.0, 0.0, 1.0, 1.0); }
+    void main() { color = vec4(0.5, 0.5, 1.0, 1.0); }
     )";
     static uint32_t const fsize = sizeof(fshader) - 1u;
 
@@ -64,21 +84,21 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     CHECKCALL(vkCreatePipelineLayout, _context->vulkan->device, &pipelineLayout, nullptr,
               &pipeline_layout);
 
-    VkRenderPass render_pass = _context->vulkan->CreateRenderPass(
-        {
-            { _context->vulkan->swapchain_format,
-              VK_IMAGE_LAYOUT_UNDEFINED,
-              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR }
-        } );
-
-    VkPipeline graphics_pipeline = _context->vulkan->CreatePipeline(
+    _context->graphics_pipeline = _context->vulkan->CreatePipeline(
         pipeline_layout,
-        render_pass,
+        _context->swapchain.render_pass,
         {
             { vmodule, VK_SHADER_STAGE_VERTEX_BIT },
             { fmodule, VK_SHADER_STAGE_FRAGMENT_BIT }
         } );
 
+    vkDestroyShaderModule(_context->vulkan->device, vmodule, nullptr);
+    vkDestroyShaderModule(_context->vulkan->device, fmodule, nullptr);
+    vkDestroyPipelineLayout(_context->vulkan->device, pipeline_layout, nullptr);
+}
+
+static void TestDraw(context_t* _context, uint32_t const _size[2])
+{
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     semaphore_info.pNext = nullptr;
@@ -89,25 +109,11 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     uint32_t swapchainIndex = 0u;
     CHECKCALL(_context->vulkan->fp.AcquireNextImageKHR,
               _context->vulkan->device,
-              _context->vulkan->swapchain,
+              _context->swapchain.handle,
               UINT64_MAX,
               acquire_semaphore,
               VK_NULL_HANDLE,
               &swapchainIndex);
-
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.pNext = nullptr;
-    framebufferInfo.flags = 0u;
-    framebufferInfo.renderPass = render_pass;
-    framebufferInfo.attachmentCount = 1u;
-    framebufferInfo.pAttachments = &_context->vulkan->swapchain_views[swapchainIndex];
-    framebufferInfo.width = _size[0];
-    framebufferInfo.height = _size[1];
-    framebufferInfo.layers = 1;
-
-    VkFramebuffer framebuffer{};
-    CHECKCALL(vkCreateFramebuffer, _context->vulkan->device, &framebufferInfo, nullptr, &framebuffer);
 
     VkCommandBufferAllocateInfo command_buffer_info{};
     command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -143,14 +149,17 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     VkRenderPassBeginInfo rp_begin_info{};
     rp_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rp_begin_info.pNext = nullptr;
-    rp_begin_info.renderPass = render_pass;
-    rp_begin_info.framebuffer = framebuffer;
-    rp_begin_info.renderArea = VkRect2D{ VkOffset2D{ 0, 0 }, VkExtent2D{ _size[0], _size[1] } };
+    rp_begin_info.renderPass = _context->swapchain.render_pass;
+    rp_begin_info.framebuffer = _context->swapchain.framebuffers[swapchainIndex];
+    rp_begin_info.renderArea = VkRect2D{
+        VkOffset2D{ 0, 0 },
+        VkExtent2D{ _context->swapchain.size[0], _context->swapchain.size[1] }
+    };
     rp_begin_info.clearValueCount = 1;
     rp_begin_info.pClearValues = &clear_value;
 
     vkCmdBeginRenderPass(command_buffer, &rp_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline);
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _context->graphics_pipeline);
     vkCmdDraw(command_buffer, 3u, 1u, 0u, 0u);
     vkCmdEndRenderPass(command_buffer);
 
@@ -175,7 +184,7 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     present_info.waitSemaphoreCount = 0u;
     present_info.pWaitSemaphores = nullptr;
     present_info.swapchainCount = 1;
-    present_info.pSwapchains = &_context->vulkan->swapchain;
+    present_info.pSwapchains = &_context->swapchain.handle;
     present_info.pImageIndices = &swapchainIndex;
     present_info.pResults = nullptr;
     CHECKCALL(_context->vulkan->fp.QueuePresentKHR,
@@ -184,16 +193,10 @@ static void EngineLoad(context_t* _context, uint32_t _size[2])
     vkQueueWaitIdle(_context->vulkan->present_queue);
 
     vkDestroySemaphore(_context->vulkan->device, acquire_semaphore, nullptr);
-    vkDestroyFramebuffer(_context->vulkan->device, framebuffer, nullptr);
+}
 
-    if (vmodule != VK_NULL_HANDLE)
-        vkDestroyShaderModule(_context->vulkan->device, vmodule, nullptr);
-    if (fmodule != VK_NULL_HANDLE)
-        vkDestroyShaderModule(_context->vulkan->device, fmodule, nullptr);
-
-    vkDestroyPipeline(_context->vulkan->device, graphics_pipeline, nullptr);
-    vkDestroyPipelineLayout(_context->vulkan->device, pipeline_layout, nullptr);
-    vkDestroyRenderPass(_context->vulkan->device, render_pass, nullptr);
+static void EngineLoad(context_t* _context)
+{
 }
 
 // geometry
@@ -212,20 +215,34 @@ extern "C" {
         context_t* context = new context_t{};
         context->window = *_window;
         context->vulkan.reset(new vktk::Context(_window->hinstance, _window->hwindow));
-        EngineLoad(context, context->window.size);
+
+        UpdateSwapchain(context, context->window.size);
+        LoadMainPipeline(context);
+
         return context;
     }
 
     DLLEXPORT void ModuleInterface_Shutdown(context_t* _context)
     {
         std::cout << "Shutdown" << std::endl;
+        vkDestroyPipeline(_context->vulkan->device, _context->graphics_pipeline, nullptr);
+        _context->swapchain.Release();
         delete _context;
     }
 
     DLLEXPORT void ModuleInterface_Reload(context_t* _context)
     {
         std::cout << "Reload" << std::endl;
-        EngineLoad(_context, _context->window.size);
+
+        vkDestroyPipeline(_context->vulkan->device, _context->graphics_pipeline, nullptr);
+        _context->swapchain.Release();
+
+        _context->vulkan.release();
+        _context->vulkan.reset(new vktk::Context(_context->window.hinstance,
+                                                 _context->window.hwindow));
+
+        UpdateSwapchain(_context, _context->window.size);
+        LoadMainPipeline(_context);
     }
 
     DLLEXPORT void ModuleInterface_LogicUpdate(context_t* _context, iotk::input_t const* _input)
@@ -234,8 +251,15 @@ extern "C" {
         //std::cout << "LogicUpdate" << std::endl;
     }
 
-    DLLEXPORT void ModuleInterface_DrawFrame(context_t*)
+    DLLEXPORT void ModuleInterface_DrawFrame(context_t* _context, bstk::OSWindow const* _window)
     {
         //std::cout << "DrawFrame" << std::endl;
+        _context->window = *_window;
+        if (UpdateSwapchain(_context, _window->size))
+        {
+            vkDestroyPipeline(_context->vulkan->device, _context->graphics_pipeline, nullptr);
+            LoadMainPipeline(_context);
+        }
+        TestDraw(_context, _window->size);
     }
 }

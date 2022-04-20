@@ -48,6 +48,22 @@ struct FPTable
 #undef AsFPTableEntry
 };
 
+struct Context;
+
+struct Swapchain {
+    uint32_t size[2] = { 0, 0 };
+    Context const* vulkan;
+
+    VkFormat format;
+    VkRenderPass render_pass;
+    VkSwapchainKHR handle = VK_NULL_HANDLE;
+    std::vector<VkImage> images;
+    std::vector<VkImageView> views;
+    std::vector<VkFramebuffer> framebuffers;
+
+    void Release();
+};
+
 struct Context
 {
     Context(uint64_t _hinstance, uint64_t _hwindow);
@@ -73,6 +89,8 @@ struct Context
                               VkRenderPass _renderPass,
                               std::vector<PipelineStage> const& _stages);
 
+    Swapchain CreateSwapchain(uint32_t const _size[2]);
+
     FPTable fp = {};
 
     VkInstance instance = {};
@@ -83,12 +101,6 @@ struct Context
     VkDevice device = {};
     VkQueue present_queue = {};
     VkCommandPool command_pool = {};
-
-    VkSwapchainKHR swapchain = {};
-    VkFormat swapchain_format = {};
-    std::vector<VkImage> swapchain_images = {};
-    std::vector<VkImageView> swapchain_views = {};
-    std::vector<VkFramebuffer> swapchain_framebuffers = {};
 };
 
 } // namespace vktk

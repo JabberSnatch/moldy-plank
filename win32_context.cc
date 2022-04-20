@@ -21,16 +21,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     Win32Context* context = (Win32Context*)GetPropA(hWnd, "Win32Context");
 
+    LRESULT result = 0;
+
     switch (uMsg)
     {
     case WM_CLOSE:
     case WM_DESTROY:
         PostQuitMessage(0);
-        return 1;
+        result = 1;
+        break;
+
+    case WM_SIZE:
+    {
+        int width = LOWORD(lParam);
+        int height = HIWORD(lParam);
+
+        if (context)
+        {
+            auto pWindow = context->windows.find(hWnd);
+            if (pWindow != context->windows.end())
+            {
+                pWindow->second.size[0] = width;
+                pWindow->second.size[1] = height;
+            }
+        }
+    } break;
 
     default:
-        return DefWindowProc(hWnd, uMsg, wParam, lParam);
+        result = DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
+
+    return result;
 }
 
 bstk::OSWindow Win32Context::CreateWindow()
@@ -90,12 +111,16 @@ bstk::OSWindow Win32Context::CreateWindow()
     output.size[0] = kWidth;
     output.size[1] = kHeight;
 
+    windows.emplace(std::make_pair(hwnd, output));
+
     return output;
 }
 
-bool Win32Context::PumpEvents(bstk::OSWindow const& _window, iotk::input_t &_state)
+bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
 {
     (void)_state;
+
+    _window = windows[(HWND)_window.hwindow];
 
     MSG msg{ 0 };
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
@@ -103,6 +128,7 @@ bool Win32Context::PumpEvents(bstk::OSWindow const& _window, iotk::input_t &_sta
         switch (msg.message)
         {
         case WM_QUIT:
+            windows.erase((HWND)_window.hwindow);
             return false;
 
         default:

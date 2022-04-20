@@ -156,6 +156,9 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
         {
         case ConfigureNotify:
         {
+            XConfigureEvent const& xcevent = xevent.xconfigure;
+            _window.size[0] = (uint32_t)xcevent.width;
+            _window.size[1] = (uint32_t)xcevent.height;
         } break;
 
         case ButtonPress:

@@ -247,8 +247,18 @@ extern "C" {
 
     DLLEXPORT void ModuleInterface_LogicUpdate(context_t* _context, iotk::input_t const* _input)
     {
+        for (uint32_t index = 0u; index < 256; ++index)
+        {
+            if (_context->lastInput.key_down[index] != _input->key_down[index])
+            {
+                if (_input->key_down[index])
+                    std::cout << "key down " << std::hex << index << std::endl;
+                else
+                    std::cout << "key up " << std::hex << index << std::endl;
+            }
+        }
+
         _context->lastInput = *_input;
-        //std::cout << "LogicUpdate" << std::endl;
     }
 
     DLLEXPORT void ModuleInterface_DrawFrame(context_t* _context, bstk::OSWindow const* _window)

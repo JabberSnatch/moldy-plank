@@ -169,6 +169,53 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
         case KeyPress:
         case KeyRelease:
         {
+            static std::array<iotk::eKey, 256> key_map = [](){
+                std::array<iotk::eKey, 256> output{};
+                output[(std::uint8_t)(XK_Tab & 0xff)] = iotk::eKey::kTab;
+                output[(std::uint8_t)(XK_Left & 0xff)] = iotk::eKey::kLeft;
+                output[(std::uint8_t)(XK_Right & 0xff)] = iotk::eKey::kRight;
+                output[(std::uint8_t)(XK_Up & 0xff)] = iotk::eKey::kUp;
+                output[(std::uint8_t)(XK_Down & 0xff)] = iotk::eKey::kDown;
+                output[(std::uint8_t)(XK_Page_Up & 0xff)] = iotk::eKey::kPageUp;
+                output[(std::uint8_t)(XK_Page_Down & 0xff)] = iotk::eKey::kPageDown;
+                output[(std::uint8_t)(XK_Home & 0xff)] = iotk::eKey::kHome;
+                output[(std::uint8_t)(XK_End & 0xff)] = iotk::eKey::kEnd;
+                output[(std::uint8_t)(XK_Insert & 0xff)] = iotk::eKey::kInsert;
+                output[(std::uint8_t)(XK_Delete & 0xff)] = iotk::eKey::kDelete;
+                output[(std::uint8_t)(XK_BackSpace & 0xff)] = iotk::eKey::kBackspace;
+                output[(std::uint8_t)(XK_Return & 0xff)] = iotk::eKey::kEnter;
+                output[(std::uint8_t)(XK_Escape & 0xff)] = iotk::eKey::kEscape;
+                return output;
+            }();
+
+            XKeyEvent& xkevent = xevent.xkey;
+
+            unsigned mod_mask = 0;
+            {
+                Window a, b; int c, d, e, f;
+                XQueryPointer(display, window, &a, &b, &c, &d, &e, &f, &mod_mask);
+            }
+
+            char kc = '\0';
+            KeySym ks;
+            XLookupString(&xkevent, &kc, 1, &ks, nullptr);
+
+            std::uint32_t km = 0u;
+            km |= (mod_mask & ControlMask) ? iotk::fKeyMod::kCtrl : 0u;
+            km |= (mod_mask & ShiftMask) ? iotk::fKeyMod::kShift : 0u;
+            km |= (mod_mask & Mod1Mask) ? iotk::fKeyMod::kAlt : 0u;
+            _state.mod_down = km;
+
+            std::uint32_t key = (((unsigned)ks & 0xff00) == 0xff00)
+                ? (std::uint32_t)ks
+                : (std::uint32_t)kc;
+
+            if (key < iotk::eKey::kASCIIBegin || key >= iotk::eKey::kASCIIEnd)
+                key = key_map[key & 0xff];
+            else
+                key = (std::uint32_t)std::tolower((unsigned char)key);
+
+            _state.key_down[key] = (xevent.type == KeyPress);
         } break;
 
         case MotionNotify:

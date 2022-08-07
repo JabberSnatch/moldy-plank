@@ -1,12 +1,12 @@
-cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
 project(engineloader)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan COMPONENTS shaderc_combined)
 add_library(vktk STATIC vktk.cc)
-target_link_libraries(vktk Vulkan::Vulkan Vulkan::shaderc)
+target_link_libraries(vktk Vulkan::Vulkan Vulkan::shaderc_combined)
 set_property(TARGET vktk PROPERTY CXX_STANDARD 20)
 
 add_library(engine MODULE engine.cc)
@@ -40,6 +40,7 @@ if (UNIX)
   target_compile_options(vktk PRIVATE "-fPIC")
   target_compile_options(engine PRIVATE "-fvisibility=hidden")
   find_package(X11 REQUIRED)
+
   list(APPEND PLATFORM_SOURCES xlib_context.cc)
   list(APPEND PLATFORM_LIBRARIES dl X11 X11::Xfixes)
 

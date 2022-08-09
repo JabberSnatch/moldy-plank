@@ -38,6 +38,7 @@ namespace vktk
 {
 
 char const* VkResultToStr(VkResult _vkResult);
+uint32_t VkFormatBytesPerUnit(VkFormat _format);
 
 struct FPTable
 {
@@ -62,6 +63,16 @@ struct Swapchain {
     std::vector<VkFramebuffer> framebuffers;
 
     void Release();
+};
+
+struct Buffer {
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+};
+
+struct Texture {
+    VkImage image;
+    VkDeviceMemory memory;
 };
 
 struct Context
@@ -91,11 +102,17 @@ struct Context
 
     Swapchain CreateSwapchain(uint32_t const _size[2]);
 
+    Buffer CreateBuffer(uint32_t _size, VkBufferUsageFlags _usage);
+    Texture CreateTexture(uint32_t _width, uint32_t _height, uint32_t _depth,
+                          VkImageType _type, VkFormat _format, VkImageUsageFlags _usage);
+
     FPTable fp = {};
 
     VkInstance instance = {};
     VkPhysicalDevice physical_device = {};
     VkPhysicalDeviceMemoryProperties memory_properties = {};
+
+    uint32_t SelectMemoryType(VkMemoryPropertyFlags _flags, uint32_t _required_size);
 
     VkSurfaceKHR surface = {};
     VkDevice device = {};

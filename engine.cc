@@ -218,6 +218,13 @@ extern "C" {
 
         UpdateSwapchain(context, context->window.size);
         LoadMainPipeline(context);
+        vktk::Buffer buffer = context->vulkan->CreateBuffer(
+            1024*1024*4,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+        vktk::Texture texture = context->vulkan->CreateTexture(
+            1024, 1024, 1,
+            VK_IMAGE_TYPE_2D, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
         return context;
     }

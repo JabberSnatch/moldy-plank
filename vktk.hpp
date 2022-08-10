@@ -75,6 +75,13 @@ struct Texture {
     VkDeviceMemory memory;
 };
 
+struct CommandBuffer{
+    VkCommandBuffer handle;
+    operator VkCommandBuffer() { return handle; }
+    void Begin();
+    void End();
+};
+
 struct Context
 {
     Context(uint64_t _hinstance, uint64_t _hwindow);
@@ -84,6 +91,8 @@ struct Context
                                       char const* _shaderName,
                                       char const* _code,
                                       size_t _codeSize);
+
+    CommandBuffer CreateCommandBuffer();
 
     struct RenderPassAttachment {
         VkFormat format;

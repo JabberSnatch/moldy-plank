@@ -1,0 +1,3 @@
+[submodule "bmp"]
+	path = bmp
+	url = git@github.com:JabberSnatch/bmp.git

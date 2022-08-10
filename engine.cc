@@ -115,22 +115,8 @@ static void TestDraw(context_t* _context, uint32_t const _size[2])
               VK_NULL_HANDLE,
               &swapchainIndex);
 
-    VkCommandBufferAllocateInfo command_buffer_info{};
-    command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_info.pNext = nullptr;
-    command_buffer_info.commandPool = _context->vulkan->command_pool;
-    command_buffer_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_buffer_info.commandBufferCount = 1;
-
-    VkCommandBuffer command_buffer{};
-    CHECKCALL(vkAllocateCommandBuffers, _context->vulkan->device, &command_buffer_info, &command_buffer);
-
-    VkCommandBufferBeginInfo cmd_begin_info{};
-    cmd_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmd_begin_info.pNext = nullptr;
-    cmd_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    cmd_begin_info.pInheritanceInfo = nullptr;
-    vkBeginCommandBuffer(command_buffer, &cmd_begin_info);
+    vktk::CommandBuffer command_buffer = _context->vulkan->CreateCommandBuffer();
+    command_buffer.Begin();
 
     VkViewport viewport{};
     viewport.x = 0.f; viewport.y = 0.f;
@@ -163,7 +149,7 @@ static void TestDraw(context_t* _context, uint32_t const _size[2])
     vkCmdDraw(command_buffer, 3u, 1u, 0u, 0u);
     vkCmdEndRenderPass(command_buffer);
 
-    vkEndCommandBuffer(command_buffer);
+    command_buffer.End();
 
     VkPipelineStageFlags wait_dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit_info{};
@@ -173,7 +159,7 @@ static void TestDraw(context_t* _context, uint32_t const _size[2])
     submit_info.pWaitSemaphores = &acquire_semaphore;
     submit_info.pWaitDstStageMask = &wait_dst_stage;
     submit_info.commandBufferCount = 1u;
-    submit_info.pCommandBuffers = &command_buffer;
+    submit_info.pCommandBuffers = &command_buffer.handle;
     submit_info.signalSemaphoreCount = 0u;
     submit_info.pSignalSemaphores = nullptr;
     vkQueueSubmit(_context->vulkan->present_queue, 1, &submit_info, VK_NULL_HANDLE);
@@ -207,6 +193,27 @@ static void EngineLoad(context_t* _context)
 // structured data
 // serialisation
 
+#define BMPTK_IMPLEMENTATION
+#include "bmp/bmptk.h"
+#include <vector>
+#include <fstream>
+
+std::vector<uint8_t> LoadFile(char const* _path)
+{
+    std::ifstream source_file(_path, std::ios_base::binary);
+
+    source_file.seekg(0, std::ios_base::end);
+    size_t size = source_file.tellg();
+    source_file.seekg(0, std::ios_base::beg);
+
+    std::vector<uint8_t> memory{};
+    memory.resize(size);
+
+    source_file.read((char*)memory.data(), size);
+
+    return memory;
+}
+
 extern "C" {
 
     DLLEXPORT context_t* ModuleInterface_Create(bstk::OSWindow const* _window)
@@ -218,13 +225,119 @@ extern "C" {
 
         UpdateSwapchain(context, context->window.size);
         LoadMainPipeline(context);
+
+        std::vector<uint8_t> fontfile = LoadFile("../font.bmp");
+        bmptk::BitmapFile bmp{};
+        bmptk::Result result = bmptk::LoadBMP(fontfile.data(), &bmp);
+
         vktk::Buffer buffer = context->vulkan->CreateBuffer(
-            1024*1024*4,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            1024*1024*1,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+        void* mappedData = nullptr;
+        CHECKCALL(vkMapMemory, context->vulkan->device,
+                  buffer.memory, 0u, VK_WHOLE_SIZE, 0u, &mappedData);
+
+        uint8_t* imageBuffer = (uint8_t*)mappedData;
+        for (uint32_t y = 0; y < abs(bmp.height); ++y)
+        {
+            for (uint32_t x = 0; x < abs(bmp.width); ++x)
+            {
+                bmptk::PixelValue src = bmptk::GetPixel(&bmp, x, y);
+                uint8_t* dst = imageBuffer + x + y*abs(bmp.width);
+                *dst = src.red;
+            }
+        }
+
+        vkUnmapMemory(context->vulkan->device, buffer.memory);
 
         vktk::Texture texture = context->vulkan->CreateTexture(
             1024, 1024, 1,
-            VK_IMAGE_TYPE_2D, VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+            VK_IMAGE_TYPE_2D, VK_FORMAT_R8_UNORM,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT
+            | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+        vktk::CommandBuffer command_buffer = context->vulkan->CreateCommandBuffer();
+        command_buffer.Begin();
+
+        VkImageMemoryBarrier image_memory_barrier{};
+        image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        image_memory_barrier.pNext = nullptr;
+        image_memory_barrier.srcAccessMask = VK_ACCESS_NONE;
+        image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        image_memory_barrier.srcQueueFamilyIndex = 0u;
+        image_memory_barrier.dstQueueFamilyIndex = 0u;
+        image_memory_barrier.image = texture.image;
+        image_memory_barrier.subresourceRange = VkImageSubresourceRange{
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0u, 1u, 0u, 1u
+        };
+
+        VkBufferMemoryBarrier buffer_memory_barrier{};
+        buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        buffer_memory_barrier.pNext = nullptr;
+        buffer_memory_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        buffer_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        buffer_memory_barrier.srcQueueFamilyIndex = 0u;
+        buffer_memory_barrier.dstQueueFamilyIndex = 0u;
+        buffer_memory_barrier.buffer = buffer.buffer;
+        buffer_memory_barrier.offset = 0u;
+        buffer_memory_barrier.size = 1024*1024;
+
+        vkCmdPipelineBarrier(command_buffer,
+                             VK_PIPELINE_STAGE_HOST_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0u,
+                             0u, nullptr,
+                             1u, &buffer_memory_barrier,
+                             1u, &image_memory_barrier);
+
+        VkBufferImageCopy copy_region{};
+        copy_region.bufferOffset = 0u;
+        copy_region.bufferRowLength = 0u;
+        copy_region.bufferImageHeight = 0u;
+        copy_region.imageSubresource = VkImageSubresourceLayers {
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0u, 0u, 1u
+        };
+        copy_region.imageOffset = VkOffset3D{ 0u, 0u, 0u };
+        copy_region.imageExtent = VkExtent3D{ 1024u, 1024u, 1u };
+
+        vkCmdCopyBufferToImage(command_buffer,
+                               buffer.buffer,
+                               texture.image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1,
+                               &copy_region);
+
+        image_memory_barrier.oldLayout = image_memory_barrier.newLayout;
+        image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        image_memory_barrier.srcAccessMask = image_memory_barrier.dstAccessMask;
+        image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(command_buffer,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0u,
+                             0u, nullptr,
+                             0u, nullptr,
+                             1u, &image_memory_barrier);
+
+        command_buffer.End();
+
+        VkSubmitInfo submit_info{};
+        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit_info.pNext = nullptr;
+        submit_info.waitSemaphoreCount = 0u;
+        submit_info.pWaitSemaphores = nullptr;
+        submit_info.pWaitDstStageMask = nullptr;
+        submit_info.commandBufferCount = 1u;
+        submit_info.pCommandBuffers = &command_buffer.handle;
+        submit_info.signalSemaphoreCount = 0u;
+        submit_info.pSignalSemaphores = nullptr;
+        vkQueueSubmit(context->vulkan->present_queue, 1, &submit_info, VK_NULL_HANDLE);
 
         return context;
     }

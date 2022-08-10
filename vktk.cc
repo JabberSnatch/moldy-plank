@@ -240,6 +240,36 @@ VkShaderModule Context::CompileShader_GLSL(VkShaderStageFlagBits _shaderStage,
     return output;
 }
 
+void CommandBuffer::Begin()
+{
+    VkCommandBufferBeginInfo cmd_begin_info{};
+    cmd_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmd_begin_info.pNext = nullptr;
+    cmd_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    cmd_begin_info.pInheritanceInfo = nullptr;
+    vkBeginCommandBuffer(handle, &cmd_begin_info);
+}
+
+void CommandBuffer::End()
+{
+    vkEndCommandBuffer(handle);
+}
+
+CommandBuffer Context::CreateCommandBuffer()
+{
+    VkCommandBufferAllocateInfo command_buffer_info{};
+    command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_info.pNext = nullptr;
+    command_buffer_info.commandPool = command_pool;
+    command_buffer_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_info.commandBufferCount = 1;
+
+    CommandBuffer command_buffer{};
+    CHECKCALL(vkAllocateCommandBuffers, device, &command_buffer_info, &command_buffer.handle);
+
+    return command_buffer;
+}
+
 VkRenderPass Context::CreateRenderPass(std::vector<RenderPassAttachment> const& _attachments)
 {
     std::vector<VkAttachmentDescription> descriptions{};
@@ -557,8 +587,7 @@ Buffer Context::CreateBuffer(uint32_t _size, VkBufferUsageFlags _usage)
     allocate_info.pNext = nullptr;
     allocate_info.allocationSize = _size;
     allocate_info.memoryTypeIndex =
-        SelectMemoryType(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                         | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        SelectMemoryType(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
                          | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                          _size);
 
@@ -628,7 +657,7 @@ uint32_t Context::SelectMemoryType(VkMemoryPropertyFlags _flags, uint32_t _requi
     {
         VkMemoryType const& memory_type = memory_properties.memoryTypes[index];
         VkMemoryHeap const& memory_heap = memory_properties.memoryHeaps[memory_type.heapIndex];
-        if (memory_type.propertyFlags & _flags == _flags
+        if ((memory_type.propertyFlags & _flags) == _flags
             && memory_heap.size >= _required_size)
         {
             return index;

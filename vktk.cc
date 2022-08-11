@@ -624,15 +624,19 @@ Texture Context::CreateTexture(uint32_t _width, uint32_t _height, uint32_t _dept
     uint32_t bpp = VkFormatBytesPerUnit(_format);
     uint32_t size = _width * _height * _depth * bpp;
 
+    Texture texture{};
+    CHECKCALL(vkCreateImage, device, &create_info, nullptr, &texture.image);
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device, texture.image, &requirements);
+
     VkMemoryAllocateInfo allocate_info{};
     allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocate_info.pNext = nullptr;
-    allocate_info.allocationSize = size;
+    allocate_info.allocationSize = requirements.size;
     allocate_info.memoryTypeIndex =
-        SelectMemoryType(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, size);
+        SelectMemoryType(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, requirements.size);
 
-    Texture texture{};
-    CHECKCALL(vkCreateImage, device, &create_info, nullptr, &texture.image);
     CHECKCALL(vkAllocateMemory, device, &allocate_info, nullptr, &texture.memory);
     CHECKCALL(vkBindImageMemory, device, texture.image, texture.memory, 0);
     return texture;

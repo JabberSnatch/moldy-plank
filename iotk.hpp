@@ -7,6 +7,7 @@ namespace iotk
 
 enum eKey
 {
+    kUnknown = 0u,
     kSpecialBegin = 1u,
     kTab = kSpecialBegin,
     kLeft,

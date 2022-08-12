@@ -28,6 +28,7 @@ struct context_t
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet descriptor_set;
 
+    uint32_t last_key;
     iotk::input_t lastInput;
 };
 
@@ -52,15 +53,20 @@ static void LoadMainPipeline(context_t* _context)
 {
     constexpr uint32_t kStageCount = 2u;
 
-    static char const vshader[] = R"(
+    static char const vshader[] = R"_(
     #version 450
     const vec2 kTriVertices[] = vec2[3]( vec2(-1.0, 3.0), vec2(-1.0, -1.0), vec2(3.0, -1.0) );
     layout(location = 0) out vec2 texCoords;
+    layout(push_constant) uniform DataBlock {
+        uint char_index;
+    };
     void main() {
         gl_Position = vec4(kTriVertices[gl_VertexIndex], 0.0, 1.0);
-        texCoords = gl_Position.xy;
+        uint char_row = char_index >> 4;
+        uint char_col = char_index & 0xf;
+        texCoords = ((gl_Position.xy * 0.5 + vec2(0.5)) + vec2(float(char_row), float(char_col))) / 16.0;
     }
-    )";
+    )_";
     static uint32_t const vsize = sizeof(vshader) - 1u;
 
     static char const fshader[] = R"(
@@ -104,14 +110,19 @@ static void LoadMainPipeline(context_t* _context)
     CHECKCALL(vkCreateDescriptorSetLayout, _context->vulkan->device,
               &descset_create, nullptr, &descset_layout);
 
+    VkPushConstantRange push_constants{};
+    push_constants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push_constants.offset = 0;
+    push_constants.size = 4;
+
     VkPipelineLayoutCreateInfo pipeline_create{};
     pipeline_create.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipeline_create.pNext = nullptr;
     pipeline_create.flags = 0u;
     pipeline_create.setLayoutCount = 1u;
     pipeline_create.pSetLayouts = &descset_layout;
-    pipeline_create.pushConstantRangeCount = 0u;
-    pipeline_create.pPushConstantRanges = nullptr;
+    pipeline_create.pushConstantRangeCount = 1u;
+    pipeline_create.pPushConstantRanges = &push_constants;
 
     CHECKCALL(vkCreatePipelineLayout, _context->vulkan->device, &pipeline_create, nullptr,
               &_context->pipeline_layout);
@@ -146,6 +157,19 @@ static void LoadMainPipeline(context_t* _context)
     descset_allocate.pSetLayouts = &descset_layout;
     CHECKCALL(vkAllocateDescriptorSets, _context->vulkan->device,
               &descset_allocate, &_context->descriptor_set);
+
+    VkSamplerCreateInfo sampler_create{};
+    sampler_create.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler_create.pNext = nullptr;
+    sampler_create.flags = 0u;
+    sampler_create.magFilter = VK_FILTER_NEAREST;
+    sampler_create.minFilter = VK_FILTER_NEAREST;
+    sampler_create.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler_create.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    CHECKCALL(vkCreateSampler, _context->vulkan->device,
+              &sampler_create, nullptr, &_context->sampler);
 
     vkDestroyShaderModule(_context->vulkan->device, vmodule, nullptr);
     vkDestroyShaderModule(_context->vulkan->device, fmodule, nullptr);
@@ -233,12 +257,19 @@ static void TestDraw(context_t* _context, uint32_t const _size[2])
     rp_begin_info.pClearValues = &clear_value;
 
     vkCmdBeginRenderPass(command_buffer, &rp_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _context->graphics_pipeline);
     vkCmdBindDescriptorSets(command_buffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             _context->pipeline_layout, 0u,
                             1u, &_context->descriptor_set,
                             0u, nullptr);
+
+    vkCmdPushConstants(command_buffer,
+                       _context->pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT,
+                       0u, 4u, &_context->last_key);
+
     vkCmdDraw(command_buffer, 3u, 1u, 0u, 0u);
     vkCmdEndRenderPass(command_buffer);
 
@@ -280,9 +311,6 @@ static void EngineLoad(context_t* _context)
 
 // geometry
 // camera
-// shaders
-// textures
-// bindings
 // structured data
 // serialisation
 
@@ -434,19 +462,6 @@ extern "C" {
         submit_info.pSignalSemaphores = nullptr;
         vkQueueSubmit(context->vulkan->present_queue, 1, &submit_info, VK_NULL_HANDLE);
 
-        VkSamplerCreateInfo sampler_create{};
-        sampler_create.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        sampler_create.pNext = nullptr;
-        sampler_create.flags = 0u;
-        sampler_create.magFilter = VK_FILTER_NEAREST;
-        sampler_create.minFilter = VK_FILTER_NEAREST;
-        sampler_create.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        sampler_create.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        sampler_create.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        sampler_create.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        CHECKCALL(vkCreateSampler, context->vulkan->device,
-                  &sampler_create, nullptr, &context->sampler);
-
         return context;
     }
 
@@ -475,12 +490,16 @@ extern "C" {
 
     DLLEXPORT void ModuleInterface_LogicUpdate(context_t* _context, iotk::input_t const* _input)
     {
-        for (uint32_t index = 0u; index < 256; ++index)
+        for (uint32_t index = 1u; index < 256; ++index)
         {
             if (_context->lastInput.key_down[index] != _input->key_down[index])
             {
                 if (_input->key_down[index])
+                {
                     std::cout << "key down " << std::hex << index << std::endl;
+                    if (index > (uint32_t)iotk::kASCIIBegin)
+                        _context->last_key = index - (uint32_t)iotk::kASCIIBegin;
+                }
                 else
                     std::cout << "key up " << std::hex << index << std::endl;
             }

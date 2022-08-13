@@ -1,8 +1,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "iotk.hpp"
-#include "bstk.hpp"
+#include "loader/iotk.hpp"
+#include "loader/bstk.hpp"
 
 #include <iostream>
 
@@ -11,7 +11,7 @@ int main(int argc, char const** argv)
     std::unique_ptr<bstk::OSContext> oscontext = bstk::CreateContext();
 
     bstk::OSWindow mainwindow = oscontext->CreateWindow();
-    bstk::EngineModule module = oscontext->EngineLoad(argv[1], (argc > 2) ? argv[2] : "");
+    bstk::EngineModule module = oscontext->EngineLoad(argv[1], (argc > 2) ? argv[2] : "build.lock");
     bstk::EngineInterface* interface = &module.interface;
     bstk::EngineInterface::context_t* engine = interface->Create(&mainwindow);
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "bstk.hpp"
-#include "iotk.hpp"
+#include "loader/bstk.hpp"
+#include "loader/iotk.hpp"
 
 #include <windows.h>
 #undef CreateWindow

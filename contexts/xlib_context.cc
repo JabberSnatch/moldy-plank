@@ -303,7 +303,9 @@ void XlibContext::EngineReloadModule(bstk::EngineModule& _module)
 
             void* hlib = dlopen(altpath.c_str(), RTLD_LAZY);
             if (!hlib)
-                std::cout << "hlib not found" << std::endl;
+                std::cout << "hlib not found "
+                          << dlerror()
+                          << std::endl;
 
             bstk::EngineInterface interface{
                 (bstk::EngineInterface::Create_t)dlsym(hlib, "ModuleInterface_Create"),

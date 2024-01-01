@@ -25,3 +25,7 @@ target_link_libraries(loader PRIVATE loader_interface)
 if (PLATFORM_LIBRARIES)
   target_link_libraries(loader PRIVATE ${PLATFORM_LIBRARIES})
 endif()
+
+if (UNIX)
+  target_link_options(loader PUBLIC "-pthread")
+endif()

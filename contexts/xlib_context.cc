@@ -133,9 +133,19 @@ bstk::OSWindow XlibContext::CreateWindow()
 
     output.hinstance = (uint64_t)display;
     output.hwindow = (uint64_t)window;
-    output.size[0] = kWidth;
-    output.size[1] = kHeight;
     output.platform_data = window_data;
+
+    for (;;)
+    {
+        XWindowAttributes window_attributes = {};
+        XGetWindowAttributes(display, window, &window_attributes);
+
+        output.size[0] = window_attributes.width;
+        output.size[1] = window_attributes.height;
+
+        if (window_attributes.map_state == IsViewable)
+            break;
+    }
 
     return output;
 }

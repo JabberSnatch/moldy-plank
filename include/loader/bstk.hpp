@@ -27,7 +27,7 @@ struct EngineInterface
     using Create_t = context_t* (*)(OSWindow const*);
     using Shutdown_t = void (*)(context_t*);
     using Reload_t = void (*)(context_t*);
-    using LogicUpdate_t = void (*)(context_t*, iotk::input_t const*);
+    using LogicUpdate_t = bool (*)(context_t*, iotk::input_t const*);
     using DrawFrame_t = void (*)(context_t*, bstk::OSWindow const*);
 
     Create_t Create;
@@ -66,7 +66,7 @@ namespace StubEngine
 inline void* Create(OSWindow const*) { return nullptr; }
 inline void Shutdown(void*) {}
 inline void Reload(void*) {}
-inline void LogicUpdate(void*, iotk::input_t const*) {}
+inline bool LogicUpdate(void*, iotk::input_t const*) { return true; }
 inline void DrawFrame(void*, OSWindow const*) {}
 }
 

@@ -38,7 +38,10 @@ int main(int argc, char const** argv)
 
         inputState.time_delta = measured_time / 1000.f;
 
-        interface->LogicUpdate(engine, &inputState);
+        bool keep_running = interface->LogicUpdate(engine, &inputState);
+        if (!keep_running)
+            break;
+
         interface->DrawFrame(engine, &mainwindow);
     }
 

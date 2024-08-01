@@ -1,5 +1,6 @@
 #include "win32_context.hpp"
 
+#include <array>
 #include <iostream>
 
 #undef interface
@@ -118,9 +119,26 @@ bstk::OSWindow Win32Context::CreateWindow()
 
 bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
 {
-    (void)_state;
-
     _window = windows[(HWND)_window.hwindow];
+
+    static std::array<iotk::eKey, 256> key_map = [](){
+        std::array<iotk::eKey, 256> output{};
+        output[(std::uint8_t)(VK_TAB & 0xff)] = iotk::eKey::kTab;
+        output[(std::uint8_t)(VK_LEFT & 0xff)] = iotk::eKey::kLeft;
+        output[(std::uint8_t)(VK_RIGHT & 0xff)] = iotk::eKey::kRight;
+        output[(std::uint8_t)(VK_UP & 0xff)] = iotk::eKey::kUp;
+        output[(std::uint8_t)(VK_DOWN & 0xff)] = iotk::eKey::kDown;
+        output[(std::uint8_t)(VK_PRIOR & 0xff)] = iotk::eKey::kPageUp;
+        output[(std::uint8_t)(VK_NEXT & 0xff)] = iotk::eKey::kPageDown;
+        output[(std::uint8_t)(VK_HOME & 0xff)] = iotk::eKey::kHome;
+        output[(std::uint8_t)(VK_END & 0xff)] = iotk::eKey::kEnd;
+        output[(std::uint8_t)(VK_INSERT & 0xff)] = iotk::eKey::kInsert;
+        output[(std::uint8_t)(VK_DELETE & 0xff)] = iotk::eKey::kDelete;
+        output[(std::uint8_t)(VK_BACK & 0xff)] = iotk::eKey::kBackspace;
+        output[(std::uint8_t)(VK_RETURN & 0xff)] = iotk::eKey::kEnter;
+        output[(std::uint8_t)(VK_ESCAPE & 0xff)] = iotk::eKey::kEscape;
+        return output;
+    }();
 
     MSG msg{ 0 };
     while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE))
@@ -130,6 +148,29 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
         case WM_QUIT:
             windows.erase((HWND)_window.hwindow);
             return false;
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+        {
+            std::uint32_t km = 0u
+                | (((::GetKeyState(VK_CONTROL) & 0x8000) != 0) ? iotk::fKeyMod::kCtrl : 0u)
+                | (((::GetKeyState(VK_SHIFT) & 0x8000) != 0) ? iotk::fKeyMod::kShift : 0u)
+                | (((::GetKeyState(VK_MENU) & 0x8000) != 0) ? iotk::fKeyMod::kAlt : 0u);
+            _state.mod_down = km;
+
+            if (msg.wParam < 256)
+            {
+                std::uint32_t key = msg.wParam;
+                if (key < iotk::eKey::kASCIIBegin || key >= iotk::eKey::kASCIIEnd)
+                    key = key_map[key & 0xff];
+                else
+                    key = (std::uint32_t)std::tolower((unsigned char)key);
+
+                _state.key_down[key] = (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN);
+            }
+        }
 
         default:
             TranslateMessage(&msg);

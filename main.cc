@@ -44,7 +44,6 @@ int main(int argc, char const** argv)
             break;
 
         interface->DrawFrame(engine, &mainwindow);
-        std::memset(&inputState, 0, sizeof(inputState));
     }
 
     interface->Shutdown(engine);

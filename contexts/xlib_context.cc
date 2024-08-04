@@ -172,8 +172,30 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
         } break;
 
         case ButtonPress:
+        {
+            XButtonEvent& xbevent = xevent.xbutton;
+
+            if (xbevent.button == Button1)
+                _state.button_down |= iotk::kLeftBtn;
+            if (xbevent.button == Button2)
+                _state.button_down |= iotk::kRightBtn;
+            if (xbevent.button == Button3)
+                _state.button_down |= iotk::kMiddleBtn;
+
+            std::cout << "button down" << std::endl;
+        } break;
         case ButtonRelease:
         {
+            XButtonEvent& xbevent = xevent.xbutton;
+
+            if (xbevent.button == Button1)
+                _state.button_down &= ~iotk::kLeftBtn;
+            if (xbevent.button == Button2)
+                _state.button_down &= ~iotk::kRightBtn;
+            if (xbevent.button == Button3)
+                _state.button_down &= ~iotk::kMiddleBtn;
+
+            std::cout << "button up" << std::endl;
         } break;
 
         case KeyPress:
@@ -230,6 +252,10 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
 
         case MotionNotify:
         {
+            XMotionEvent& xmevent = xevent.xmotion;
+
+            _state.cursor[0] = xmevent.x;
+            _state.cursor[1] = xmevent.y;
         } break;
 
         case DestroyNotify:

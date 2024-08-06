@@ -3,6 +3,8 @@
 #include <array>
 #include <iostream>
 
+#include <windowsx.h>
+
 #undef interface
 
 namespace bstk {
@@ -148,6 +150,50 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
         case WM_QUIT:
             windows.erase((HWND)_window.hwindow);
             return false;
+
+        case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down |= iotk::kLeftBtn;
+        } break;
+        case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down |= iotk::kRightBtn;
+        } break;
+        case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down |= iotk::kMiddleBtn;
+        } break;
+
+        case WM_LBUTTONUP:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down &= ~iotk::kLeftBtn;
+        } break;
+        case WM_RBUTTONUP:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down &= ~iotk::kRightBtn;
+        } break;
+        case WM_MBUTTONUP:
+        {
+            if (::GetCapture() == NULL)
+                ::SetCapture((HWND)_window.hwindow);
+            _state.button_down &= ~iotk::kMiddleBtn;
+        } break;
+
+        case WM_MOUSEMOVE:
+        {
+            _state.cursor[0] = GET_X_LPARAM(msg.lParam);
+            _state.cursor[1] = GET_Y_LPARAM(msg.lParam);
+        } break;
 
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:

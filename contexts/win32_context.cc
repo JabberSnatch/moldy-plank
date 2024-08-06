@@ -195,6 +195,11 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
             _state.cursor[1] = GET_Y_LPARAM(msg.lParam);
         } break;
 
+        case WM_MOUSEWHEEL:
+        {
+            _state.wheel_delta = GET_WHEEL_DELTA_WPARAM(msg.wParam);
+        } break;
+
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
         case WM_KEYUP:

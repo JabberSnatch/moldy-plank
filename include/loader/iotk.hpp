@@ -50,6 +50,7 @@ struct input_t
     bool key_down[256];
     uint32_t mod_down;
     int32_t cursor[2];
+    int32_t wheel_delta;
     uint32_t button_down;
 };
 

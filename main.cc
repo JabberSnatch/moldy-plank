@@ -44,6 +44,8 @@ int main(int argc, char const** argv)
             break;
 
         interface->DrawFrame(engine, &mainwindow);
+
+        inputState.wheel_delta = 0;
     }
 
     interface->Shutdown(engine);

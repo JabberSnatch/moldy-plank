@@ -187,7 +187,7 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
             if (xbevent.button == Button5)
                 _state.wheel_delta = -140;
 
-            std::cout << "button down" << std::endl;
+            //std::cout << "button down" << std::endl;
         } break;
         case ButtonRelease:
         {
@@ -200,7 +200,7 @@ bool XlibContext::PumpEvents(bstk::OSWindow& _window, iotk::input_t& _state)
             if (xbevent.button == Button3)
                 _state.button_down &= ~iotk::kRightBtn;
 
-            std::cout << "button up" << std::endl;
+            //std::cout << "button up" << std::endl;
         } break;
 
         case KeyPress:

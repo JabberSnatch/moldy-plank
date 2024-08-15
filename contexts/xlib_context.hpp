@@ -11,5 +11,6 @@ struct XlibContext : public bstk::OSContext
     bstk::EngineModule EngineLoad(std::string const& _path, std::string const& _lockfile) override;
     void EngineRelease(bstk::EngineModule& _module) override;
     bool EngineReloadRequired(bstk::EngineModule const& _module) override;
-    void EngineReloadModule(bstk::EngineModule& _module) override;
+    bstk::PlatformData EngineReloadModule(bstk::EngineModule& _module) override;
+    void EngineReleasePlatformData(bstk::PlatformData _data) override;
 };

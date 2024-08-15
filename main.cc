@@ -26,9 +26,13 @@ int main(int argc, char const** argv)
     {
         if (oscontext->EngineReloadRequired(module))
         {
-            oscontext->EngineReloadModule(module);
-            interface->Reload(engine);
-            last_frame_begin = StdClock::now();
+            bstk::PlatformData stale_module = oscontext->EngineReloadModule(module);
+            if (stale_module)
+            {
+                interface->Reload(engine);
+                last_frame_begin = StdClock::now();
+                oscontext->EngineReleasePlatformData(stale_module);
+            }
         }
 
         StdClock::time_point frame_marker = last_frame_begin;

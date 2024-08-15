@@ -37,11 +37,13 @@ struct EngineInterface
     DrawFrame_t DrawFrame;
 };
 
+using PlatformData = void*;
+
 struct EngineModule
 {
     std::string path;
     std::string lockfile;
-    void* platform_data;
+    PlatformData platform_data;
     EngineInterface interface;
 };
 
@@ -58,7 +60,8 @@ struct OSContext
     virtual EngineModule EngineLoad(std::string const& _path, std::string const& _lockfile) = 0;
     virtual void EngineRelease(EngineModule& _module) = 0;
     virtual bool EngineReloadRequired(EngineModule const& _module) = 0;
-    virtual void EngineReloadModule(EngineModule& _module) = 0;
+    virtual PlatformData EngineReloadModule(EngineModule& _module) = 0;
+    virtual void EngineReleasePlatformData(PlatformData _data) = 0;
 };
 
 namespace StubEngine
@@ -91,7 +94,8 @@ struct StubOS : public OSContext
     }
     void EngineRelease(EngineModule&) override {}
     bool EngineReloadRequired(EngineModule const&) override { return false; }
-    void EngineReloadModule(EngineModule&) override {}
+    PlatformData EngineReloadModule(EngineModule&) override { return nullptr; }
+    void EngineReleasePlatformData(PlatformData) override {}
 };
 
 #if defined(_WIN32) || defined(__unix__)

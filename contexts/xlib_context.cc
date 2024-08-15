@@ -320,54 +320,70 @@ bool XlibContext::EngineReloadRequired(bstk::EngineModule const& _module)
     return lastWriteTime > moduleInfo.timestamp;
 }
 
-void XlibContext::EngineReloadModule(bstk::EngineModule& _module)
+bstk::PlatformData XlibContext::EngineReloadModule(bstk::EngineModule& _module)
 {
     XlibModuleInfo& moduleInfo = *(XlibModuleInfo*)_module.platform_data;
 
     if (!PosixFileExists(_module.path.c_str()))
-        return;
+        return nullptr;
 
     bool hasLockFile = (_module.lockfile != "");
-    for (uint32_t readIndex = 0u; readIndex < 128; ++readIndex)
+    if (hasLockFile && PosixFileExists(_module.lockfile.c_str()))
+        return nullptr;
+
+    std::unique_ptr<XlibModuleInfo> stale_module{ new XlibModuleInfo(moduleInfo) };
+
+    std::string altpath = _module.path;
+    altpath[altpath.size() - 1] = '_';
+    altpath += std::to_string(moduleInfo.load_index++);
+    moduleInfo.load_index &= 0xff;
+
+    time_t lastWriteTime = PosixLastWriteTime(_module.path.c_str());
+
+    std::cout << "copying to " << altpath << std::endl;
+    PosixCopyFile(_module.path.c_str(), altpath.c_str());
+
+    void* hlib = dlopen(altpath.c_str(), RTLD_NOW);
+    if (!hlib)
     {
-        if (!hasLockFile
-            || !PosixFileExists(_module.lockfile.c_str()))
-        {
-            std::string altpath = _module.path;
-            altpath[altpath.size() - 1] = '_';
-            altpath += std::to_string(moduleInfo.load_index++);
-            moduleInfo.load_index &= 0xff;
-
-            time_t lastWriteTime = PosixLastWriteTime(_module.path.c_str());
-
-            PosixCopyFile(_module.path.c_str(), altpath.c_str());
-
-            void* hlib = dlopen(altpath.c_str(), RTLD_LAZY);
-            if (!hlib)
-                std::cout << "hlib not found "
-                          << dlerror()
-                          << std::endl;
-
-            bstk::EngineInterface interface{
-                (bstk::EngineInterface::Create_t)dlsym(hlib, "ModuleInterface_Create"),
-                (bstk::EngineInterface::Shutdown_t)dlsym(hlib, "ModuleInterface_Shutdown"),
-                (bstk::EngineInterface::Reload_t)dlsym(hlib, "ModuleInterface_Reload"),
-                (bstk::EngineInterface::LogicUpdate_t)dlsym(hlib, "ModuleInterface_LogicUpdate"),
-                (bstk::EngineInterface::DrawFrame_t)dlsym(hlib, "ModuleInterface_DrawFrame"),
-            };
-
-            if (!interface.Create)
-                std::cout << "Create not found" << std::endl;
-
-            _module.interface = interface;
-            moduleInfo.timestamp = lastWriteTime;
-            if (moduleInfo.hlib)
-                dlclose(moduleInfo.hlib);
-            moduleInfo.hlib = hlib;
-            std::cout << "load attempt " << readIndex << std::endl;
-            break;
-        }
-
-        usleep(100);
+        std::cout << "hlib not found "
+                  << dlerror()
+                  << std::endl;
+        return nullptr;
     }
+
+    bstk::EngineInterface interface{
+        (bstk::EngineInterface::Create_t)dlsym(hlib, "ModuleInterface_Create"),
+        (bstk::EngineInterface::Shutdown_t)dlsym(hlib, "ModuleInterface_Shutdown"),
+        (bstk::EngineInterface::Reload_t)dlsym(hlib, "ModuleInterface_Reload"),
+        (bstk::EngineInterface::LogicUpdate_t)dlsym(hlib, "ModuleInterface_LogicUpdate"),
+        (bstk::EngineInterface::DrawFrame_t)dlsym(hlib, "ModuleInterface_DrawFrame"),
+    };
+
+#if 0
+    std::cout << "loaded pointers : " << std::endl << std::hex
+              << "\t" << (intptr_t)interface.Create << std::endl
+              << "\t" << (intptr_t)interface.Shutdown << std::endl
+              << "\t" << (intptr_t)interface.Reload << std::endl
+              << "\t" << (intptr_t)interface.LogicUpdate << std::endl
+              << "\t" << (intptr_t)interface.DrawFrame << std::endl;
+    std::cout << std::dec;
+#endif
+
+    if (!interface.Create)
+        std::cout << "Create not found" << std::endl;
+
+    _module.interface = interface;
+    moduleInfo.timestamp = lastWriteTime;
+    moduleInfo.hlib = hlib;
+    std::cout << "reload successful" << std::endl;
+    return stale_module.release();
+}
+
+void XlibContext::EngineReleasePlatformData(bstk::PlatformData _data)
+{
+    XlibModuleInfo& moduleInfo = *(XlibModuleInfo*)_data;
+    if (moduleInfo.hlib)
+        dlclose(moduleInfo.hlib);
+    delete (XlibModuleInfo*)_data;
 }

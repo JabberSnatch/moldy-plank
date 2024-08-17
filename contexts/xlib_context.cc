@@ -335,8 +335,7 @@ bstk::PlatformData XlibContext::EngineReloadModule(bstk::EngineModule& _module)
 
     std::string altpath = _module.path;
     altpath[altpath.size() - 1] = '_';
-    altpath += std::to_string(moduleInfo.load_index++);
-    moduleInfo.load_index &= 0xff;
+    altpath += std::to_string(moduleInfo.load_index);
 
     time_t lastWriteTime = PosixLastWriteTime(_module.path.c_str());
 
@@ -351,6 +350,7 @@ bstk::PlatformData XlibContext::EngineReloadModule(bstk::EngineModule& _module)
                   << std::endl;
         return nullptr;
     }
+    moduleInfo.load_index = (moduleInfo.load_index+1) & 0xff;
 
     bstk::EngineInterface interface{
         (bstk::EngineInterface::Create_t)dlsym(hlib, "ModuleInterface_Create"),

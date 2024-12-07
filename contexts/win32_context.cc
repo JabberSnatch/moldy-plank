@@ -263,61 +263,82 @@ bool Win32Context::EngineReloadRequired(bstk::EngineModule const& _module)
     return (CompareFileTime(&lastWriteTime, &moduleInfo.timestamp) != 0);
 }
 
-void Win32Context::EngineReloadModule(bstk::EngineModule& _module)
+bstk::PlatformData Win32Context::EngineReloadModule(bstk::EngineModule& _module)
 {
     Win32ModuleInfo& moduleInfo = *(Win32ModuleInfo*)_module.platform_data;
-    FreeLibrary(moduleInfo.handle);
 
     bool hasLockFile = (_module.lockfile != "");
     WIN32_FILE_ATTRIBUTE_DATA dummy;
-    for (uint32_t readIndex = 0u; readIndex < 128; ++readIndex)
+    if (hasLockFile
+        && GetFileAttributesExA(_module.lockfile.c_str(), GetFileExInfoStandard, &dummy))
+        return nullptr;
+
+    std::unique_ptr<Win32ModuleInfo> stale_module{ new Win32ModuleInfo(moduleInfo) };
+
+    FILETIME lastWriteTime{};
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    GetFileAttributesExA(_module.path.c_str(), GetFileExInfoStandard, &data);
+    lastWriteTime = data.ftLastWriteTime;
+
+    HANDLE file = CreateFileA(_module.path.c_str(),
+                              GENERIC_READ,
+                              FILE_SHARE_READ,
+                              NULL,
+                              NULL,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL);
+
+    std::string altpath = _module.path;
+    altpath[altpath.size() - 1] = '_';
+    altpath += std::to_string(moduleInfo.load_index++);
+    moduleInfo.load_index &= 0xff;
+
+    bool copy_success = false;
+    for (uint32_t copyIndex = 0u; copyIndex < 128u; ++copyIndex)
     {
-        if (!hasLockFile
-            || !GetFileAttributesExA(_module.lockfile.c_str(), GetFileExInfoStandard, &dummy))
+        if (CopyFileA(_module.path.c_str(), altpath.c_str(), FALSE))
         {
-            FILETIME lastWriteTime{};
-            WIN32_FILE_ATTRIBUTE_DATA data{};
-            GetFileAttributesExA(_module.path.c_str(), GetFileExInfoStandard, &data);
-            lastWriteTime = data.ftLastWriteTime;
-
-            HANDLE file = CreateFileA(_module.path.c_str(),
-                                      GENERIC_READ,
-                                      FILE_SHARE_READ,
-                                      NULL,
-                                      NULL,
-                                      FILE_ATTRIBUTE_NORMAL,
-                                      NULL);
-
-            std::string altpath = _module.path;
-            altpath[altpath.size() - 1] = '_';
-            altpath += std::to_string(moduleInfo.load_index++);
-            moduleInfo.load_index &= 0xff;
-
-            for (uint32_t copyIndex = 0u; copyIndex < 128u; ++copyIndex)
-                if (CopyFileA(_module.path.c_str(), altpath.c_str(), FALSE))
-                    break;
-
-            CloseHandle(file);
-
-            HMODULE module = LoadLibraryA(TEXT(altpath.c_str()));
-            if (module == NULL)
-                std::cout << "Module not found" << std::endl;
-
-            bstk::EngineInterface interface{
-                (bstk::EngineInterface::Create_t)GetProcAddress(module, "ModuleInterface_Create"),
-                (bstk::EngineInterface::Shutdown_t)GetProcAddress(module, "ModuleInterface_Shutdown"),
-                (bstk::EngineInterface::Reload_t)GetProcAddress(module, "ModuleInterface_Reload"),
-                (bstk::EngineInterface::LogicUpdate_t)GetProcAddress(module, "ModuleInterface_LogicUpdate"),
-                (bstk::EngineInterface::DrawFrame_t)GetProcAddress(module, "ModuleInterface_DrawFrame"),
-            };
-
-            _module.interface = interface;
-            moduleInfo.timestamp = lastWriteTime;
-            moduleInfo.handle = module;
-            std::cout << "load attempt " << readIndex << std::endl;
+            copy_success = true;
             break;
         }
-
-        Sleep(100);
     }
+
+    CloseHandle(file);
+
+    if (!copy_success)
+    {
+        std::cout << "Module copy failed" << std::endl;
+        return nullptr;
+    }
+
+    HMODULE module = LoadLibraryA(TEXT(altpath.c_str()));
+    if (module == NULL)
+    {
+        std::cout << "Module not found" << std::endl;
+        return nullptr;
+    }
+
+    bstk::EngineInterface interface{
+        (bstk::EngineInterface::Create_t)GetProcAddress(module, "ModuleInterface_Create"),
+        (bstk::EngineInterface::Shutdown_t)GetProcAddress(module, "ModuleInterface_Shutdown"),
+        (bstk::EngineInterface::Reload_t)GetProcAddress(module, "ModuleInterface_Reload"),
+        (bstk::EngineInterface::LogicUpdate_t)GetProcAddress(module, "ModuleInterface_LogicUpdate"),
+        (bstk::EngineInterface::DrawFrame_t)GetProcAddress(module, "ModuleInterface_DrawFrame"),
+    };
+
+    if (!interface.Create)
+        std::cout << "Create not found" << std::endl;
+
+    _module.interface = interface;
+    moduleInfo.timestamp = lastWriteTime;
+    moduleInfo.handle = module;
+    return stale_module.release();
+}
+
+void Win32Context::EngineReleasePlatformData(bstk::PlatformData _data)
+{
+    Win32ModuleInfo& moduleInfo = *(Win32ModuleInfo*)_data;
+    if (moduleInfo.handle)
+        FreeLibrary(moduleInfo.handle);
+    delete (Win32ModuleInfo*)_data;
 }

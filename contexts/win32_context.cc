@@ -107,6 +107,27 @@ bstk::OSWindow Win32Context::CreateWindow()
     if (!hwnd)
         return output;
 
+#if 0
+    TCHAR szFile[MAX_PATH];
+    {
+        OPENFILENAME ofn;
+
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFile = szFile;
+        ofn.lpstrFile[0] = '\0';
+        ofn.hwndOwner = hwnd;
+        ofn.nMaxFile = sizeof(szFile);
+        ofn.lpstrFilter = TEXT("All files(*.*)\0*.*\0Text files(*.txt)\0*.txt\0");
+        ofn.nFilterIndex = 1;
+        ofn.lpstrInitialDir = NULL;
+        ofn.lpstrFileTitle = NULL;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        GetOpenFileName(&ofn);
+    }
+#endif
+
     SetPropA(hwnd, "Win32Context", this);
 
     output.hinstance = (uint64_t)hinstance;

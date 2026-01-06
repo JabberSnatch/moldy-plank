@@ -107,6 +107,8 @@ bstk::OSWindow Win32Context::CreateWindow()
     if (!hwnd)
         return output;
 
+    SetActiveWindow(hwnd);
+
 #if 0
     TCHAR szFile[MAX_PATH];
     {
@@ -174,8 +176,10 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
 
         case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
         {
+#if 0
             if (::GetCapture() == NULL)
                 ::SetCapture((HWND)_window.hwindow);
+#endif
             _state.button_down |= iotk::kLeftBtn;
         } break;
         case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
@@ -193,8 +197,10 @@ bool Win32Context::PumpEvents(bstk::OSWindow& _window, iotk::input_t &_state)
 
         case WM_LBUTTONUP:
         {
+#if 0
             if (::GetCapture() == NULL)
                 ::SetCapture((HWND)_window.hwindow);
+#endif
             _state.button_down &= ~iotk::kLeftBtn;
         } break;
         case WM_RBUTTONUP:
